@@ -28,7 +28,7 @@ class Browser {
         const browser = await playwright.chromium.launch({
             //channel: 'msedge', // Uses Edge instead of chrome
             headless: this.bot.config.headless,
-            // executablePath: process.env.CHROME_BIN,
+            executablePath: process.env.CHROME_BIN,
             ...(proxy.url && { proxy: { username: proxy.username, password: proxy.password, server: `${proxy.url}:${proxy.port}` } }),
             args: [
                 '--no-sandbox',
@@ -44,7 +44,7 @@ class Browser {
                 '--disable-component-update',
                 '--disable-software-rasterizer',
                 '--disable-dev-shm-usage',
-                '--disable-features=IsolateOrigins,site-per-process' // Helps resolve issues with the new authentication interface
+                '--disable-features=IsolateOrigins,site-per-process'
             ]
         })
 
@@ -52,10 +52,20 @@ class Browser {
 
         const fingerprint = sessionData.fingerprint ? sessionData.fingerprint : await this.generateFingerprint()
 
-        const context = await newInjectedContext(browser as any, { fingerprint: fingerprint })
+        const context = await newInjectedContext(browser as any, { 
+            fingerprint: fingerprint,
+            newContextOptions: {
+                viewport: this.bot.isMobile ? { width: 390, height: 844 } : { width: 1280, height: 720 }
+            }
+        })
 
-        // Set timeout to preferred amount
-        context.setDefaultTimeout(this.bot.utils.stringToMs(this.bot.config?.globalTimeout ?? 30_000))
+        // Set timeout to preferred amount with additional wait time for the new interface
+        context.setDefaultTimeout(this.bot.utils.stringToMs(this.bot.config?.globalTimeout ?? 45_000))
+
+        // Allow popups for the new authentication interface
+        await context.setExtraHTTPHeaders({
+            'Accept-Language': 'en-US;q=0.8,en;q=0.7'
+        })
 
         await context.addCookies(sessionData.cookies)
 
