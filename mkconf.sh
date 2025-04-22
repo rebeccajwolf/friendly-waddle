@@ -2,11 +2,11 @@
 
 # Makes accounts.json
 
-cat > /usr/src/microsoft-rewards-script/src/accounts.json <<EOF
+cat > /home/user/app/src/accounts.json <<EOF
 ${ACCOUNTS}
 EOF
 
-cat > /usr/src/microsoft-rewards-script/src/config.json <<EOF
+cat > /home/user/app/src/config.json <<EOF
 {
     "baseURL": "https://rewards.bing.com",
     "sessionPath": "sessions",
