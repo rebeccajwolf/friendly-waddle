@@ -25,10 +25,10 @@ class Browser {
     }
 
     async createBrowser(proxy: AccountProxy, email: string): Promise<BrowserContext> {
-        const browser = await playwright.firefox.launch({
+        const browser = await playwright.chromium.launch({
             //channel: 'msedge', // Uses Edge instead of chrome
             headless: this.bot.config.headless,
-            // executablePath: process.env.CHROME_BIN,
+            executablePath: process.env.CHROME_BIN,
             ...(proxy.url && { proxy: { username: proxy.username, password: proxy.password, server: `${proxy.url}:${proxy.port}` } }),
             args: [
                 '--no-sandbox',
@@ -43,7 +43,8 @@ class Browser {
                 '--disable-gpu',
                 '--disable-component-update',
                 '--disable-software-rasterizer',
-                '--disable-dev-shm-usage'
+                '--disable-dev-shm-usage',
+                '--disable-features=IsolateOrigins,site-per-process' // Helps resolve issues with the new authentication interface
             ]
         })
 
