@@ -9,5 +9,6 @@ pkill -9 "google chrome"
 pkill -9 "playwright"
 pkill -9 node
 pkill -9 nodejs
+pkill -9 firefox
 
 echo "Finished Cleaning Mem..."
