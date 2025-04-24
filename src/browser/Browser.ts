@@ -43,8 +43,7 @@ class Browser {
                 '--disable-gpu',
                 '--disable-component-update',
                 '--disable-software-rasterizer',
-                '--disable-dev-shm-usage',
-                '--disable-features=IsolateOrigins,site-per-process'
+                '--disable-dev-shm-usage'
             ]
         })
 
@@ -52,20 +51,10 @@ class Browser {
 
         const fingerprint = sessionData.fingerprint ? sessionData.fingerprint : await this.generateFingerprint()
 
-        const context = await newInjectedContext(browser as any, { 
-            fingerprint: fingerprint,
-            newContextOptions: {
-                viewport: this.bot.isMobile ? { width: 390, height: 844 } : { width: 1280, height: 720 }
-            }
-        })
+        const context = await newInjectedContext(browser as any, { fingerprint: fingerprint })
 
-        // Set timeout to preferred amount with additional wait time for the new interface
-        context.setDefaultTimeout(this.bot.utils.stringToMs(this.bot.config?.globalTimeout ?? 45_000))
-
-        // Allow popups for the new authentication interface
-        await context.setExtraHTTPHeaders({
-            'Accept-Language': 'en-US;q=0.8,en;q=0.7'
-        })
+        // Set timeout to preferred amount
+        context.setDefaultTimeout(this.bot.utils.stringToMs(this.bot.config?.globalTimeout ?? 30000))
 
         await context.addCookies(sessionData.cookies)
 

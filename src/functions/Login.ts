@@ -45,7 +45,7 @@ export class Login {
             // Check if account is locked
             await this.checkAccountLocked(page)
 
-            const isLoggedIn = await page.waitForSelector('html[data-role-name="RewardsPortal"]', { timeout: 10_000 }).then(() => true).catch(() => false)
+            const isLoggedIn = await page.waitForSelector('html[data-role-name="RewardsPortal"]', { timeout: 10000 }).then(() => true).catch(() => false)
 
             if (!isLoggedIn) {
                 await this.execLogin(page, email, password)
@@ -218,7 +218,7 @@ export class Login {
                 while (true) {
                     const button = await page.waitForSelector('button[aria-describedby="pushNotificationsTitle errorDescription"]', { state: 'visible', timeout: 2000 }).catch(() => null)
                     if (button) {
-                        await this.bot.utils.wait(60_000)
+                        await this.bot.utils.wait(60000)
                         await button.click()
 
                         continue
@@ -228,7 +228,7 @@ export class Login {
                 }
             }
 
-            await page.click('button[aria-describedby="confirmSendTitle"]').catch(() => {})
+            await page.click('button[aria-describedby="confirmSendTitle"]').catch(() => { })
             await this.bot.utils.wait(2000)
             const element = await page.waitForSelector('#displaySign', { state: 'visible', timeout: 2000 })
             return await element.textContent()
@@ -242,7 +242,7 @@ export class Login {
                 this.bot.log(this.bot.isMobile, 'LOGIN', `Press the number ${numberToPress} on your Authenticator app to approve the login`)
                 this.bot.log(this.bot.isMobile, 'LOGIN', 'If you press the wrong number or the "DENY" button, try again in 60 seconds')
 
-                await page.waitForSelector('#i0281', { state: 'detached', timeout: 60_000 })
+                await page.waitForSelector('#i0281', { state: 'detached', timeout: 60000 })
 
                 this.bot.log(this.bot.isMobile, 'LOGIN', 'Login successfully approved!')
                 break
@@ -285,7 +285,7 @@ export class Login {
         }
 
         // Wait for login to complete
-        await page.waitForSelector('html[data-role-name="RewardsPortal"]', { timeout: 10_000 })
+        await page.waitForSelector('html[data-role-name="RewardsPortal"]', { timeout: 10000 })
         this.bot.log(this.bot.isMobile, 'LOGIN', 'Successfully logged into the rewards portal')
     }
 
