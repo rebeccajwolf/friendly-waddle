@@ -90,35 +90,68 @@ export class Login {
 
                 // Try to enter email
                 let emailSuccess = false;
+                const emailInputSelector = 'input[type="email"]'
                 try {
-                    // Wait for email field to be ready
-                    await page.waitForSelector('#i0116', { state: 'visible', timeout: 10000 })
+                    // // Wait for email field to be ready
+                    // await page.waitForSelector('#i0116', { state: 'visible', timeout: 10000 })
                     
-                    // Verify element is interactive
-                    const emailReady = await page.evaluate(() => {
-                        const element = document.querySelector('#i0116')
-                        if (!element) return false
-                        const style = window.getComputedStyle(element)
-                        return style.display !== 'none' && 
-                               style.visibility !== 'hidden' && 
-                               style.opacity !== '0'
-                    })
+                    // // Verify element is interactive
+                    // const emailReady = await page.evaluate(() => {
+                    //     const element = document.querySelector('#i0116')
+                    //     if (!element) return false
+                    //     const style = window.getComputedStyle(element)
+                    //     return style.display !== 'none' && 
+                    //            style.visibility !== 'hidden' && 
+                    //            style.opacity !== '0'
+                    // })
 
-                    if (!emailReady) {
-                        throw this.bot.log(this.bot.isMobile, 'Email field not interactive', 'error')
+                    // if (!emailReady) {
+                    //     throw this.bot.log(this.bot.isMobile, 'Email field not interactive', 'error')
+                    // }
+                    
+
+
+                    // await page.fill('#i0116', email)
+                    // await page.click('#idSIButton9')
+                    
+                    // // Wait for either password field or 2FA display
+                    // await Promise.race([
+                    //     page.waitForSelector('#i0118', { state: 'visible', timeout: 10000 }),
+                    //     page.waitForSelector('#displaySign', { state: 'visible', timeout: 10000 })
+                    // ])
+                    
+                    // emailSuccess = true;
+                    // this.bot.log(this.bot.isMobile, 'LOGIN', 'Email entered successfully')
+                    // Wait for email field
+                    const emailField = await page.waitForSelector(emailInputSelector, { state: 'visible', timeout: 2000 }).catch(() => null)
+                    if (!emailField) {
+                        this.bot.log(this.bot.isMobile, 'LOGIN', 'Email field not found', 'warn')
+                        return
                     }
 
-                    await page.fill('#i0116', email)
-                    await page.click('#idSIButton9')
-                    
-                    // Wait for either password field or 2FA display
-                    await Promise.race([
-                        page.waitForSelector('#i0118', { state: 'visible', timeout: 10000 }),
-                        page.waitForSelector('#displaySign', { state: 'visible', timeout: 10000 })
-                    ])
-                    
-                    emailSuccess = true;
-                    this.bot.log(this.bot.isMobile, 'LOGIN', 'Email entered successfully')
+                    await this.bot.utils.wait(1000)
+
+                    // Check if email is prefilled
+                    const emailPrefilled = await page.waitForSelector('#userDisplayName', { timeout: 10000 }).catch(() => null)
+                    if (emailPrefilled) {
+                        this.bot.log(this.bot.isMobile, 'LOGIN', 'Email already prefilled by Microsoft')
+                    } else {
+                        // Else clear and fill email
+                        await page.fill(emailInputSelector, '')
+                        await this.bot.utils.wait(500)
+                        await page.fill(emailInputSelector, email)
+                        await this.bot.utils.wait(1000)
+                    }
+
+                    const nextButton = await page.waitForSelector('button[type="submit"]', { timeout: 2000 }).catch(() => null)
+                    if (nextButton) {
+                        await nextButton.click()
+                        await this.bot.utils.wait(2000)
+                        emailSuccess = true;
+                        this.bot.log(this.bot.isMobile, 'LOGIN', 'Email entered successfully')
+                    } else {
+                        this.bot.log(this.bot.isMobile, 'LOGIN', 'Next button not found after email entry', 'warn')
+                    }
                 } catch (error: any) {
                     this.bot.log(this.bot.isMobile, 'LOGIN', `Email entry failed, attempt ${retryCount + 1}/${this.maxLoginRetries}`, 'warn')
                     retryCount++;
@@ -129,36 +162,59 @@ export class Login {
                 }
 
                 if (emailSuccess) {
-            await this.bot.browser.utils.reloadBadPage(page)
+                    await this.bot.browser.utils.reloadBadPage(page)
                     
                     // Try to enter password
+                    const passwordInputSelector = 'input[type="password"]'
                     try {
                         const has2FA = await page.waitForSelector('#displaySign', { timeout: 2000 }).then(() => true).catch(() => false)
                         
                         if (!has2FA) {
-                            // Wait for password field to be ready
-                            await page.waitForSelector('#i0118', { state: 'visible', timeout: 10000 })
+                            // // Wait for password field to be ready
+                            // await page.waitForSelector('#i0118', { state: 'visible', timeout: 10000 })
                             
-                            // Verify element is interactive
-                            const passwordReady = await page.evaluate(() => {
-                                const element = document.querySelector('#i0118')
-                                if (!element) return false
-                                const style = window.getComputedStyle(element)
-                                return style.display !== 'none' && 
-                                       style.visibility !== 'hidden' && 
-                                       style.opacity !== '0'
-                            })
+                            // // Verify element is interactive
+                            // const passwordReady = await page.evaluate(() => {
+                            //     const element = document.querySelector('#i0118')
+                            //     if (!element) return false
+                            //     const style = window.getComputedStyle(element)
+                            //     return style.display !== 'none' && 
+                            //            style.visibility !== 'hidden' && 
+                            //            style.opacity !== '0'
+                            // })
 
-                            if (!passwordReady) {
-                                throw this.bot.log(this.bot.isMobile, 'Password field not interactive', 'error')
+                            // if (!passwordReady) {
+                            //     throw this.bot.log(this.bot.isMobile, 'Password field not interactive', 'error')
+                            // }
+
+                            // await this.bot.utils.wait(2000)
+                            // await page.fill('#i0118', password)
+                            // await this.bot.utils.wait(2000)
+                            // await page.click('#idSIButton9')
+                            // await this.bot.utils.wait(2000)
+                            // this.bot.log(this.bot.isMobile, 'LOGIN', 'Password entered successfully')
+                            // Wait for password field
+                            const passwordField = await page.waitForSelector(passwordInputSelector, { state: 'visible', timeout: 10000 }).catch(() => null)
+                            if (!passwordField) {
+                                throw this.bot.log(this.bot.isMobile, 'LOGIN', 'Password field not found', 'error')
                             }
 
-                            await this.bot.utils.wait(2000)
-                            await page.fill('#i0118', password)
-                            await this.bot.utils.wait(2000)
-                            await page.click('#idSIButton9')
-                            await this.bot.utils.wait(2000)
-                            this.bot.log(this.bot.isMobile, 'LOGIN', 'Password entered successfully')
+                            await this.bot.utils.wait(1000)
+
+                            // Clear and fill password
+                            await page.fill(passwordInputSelector, '')
+                            await this.bot.utils.wait(500)
+                            await page.fill(passwordInputSelector, password)
+                            await this.bot.utils.wait(1000)
+
+                            const nextButton = await page.waitForSelector('button[type="submit"]', { timeout: 2000 }).catch(() => null)
+                            if (nextButton) {
+                                await nextButton.click()
+                                await this.bot.utils.wait(2000)
+                                this.bot.log(this.bot.isMobile, 'LOGIN', 'Password entered successfully')
+                            } else {
+                                this.bot.log(this.bot.isMobile, 'LOGIN', 'Next button not found after password entry', 'warn')
+                            }
                         } else {
                             await this.handle2FA(page)
                         }
