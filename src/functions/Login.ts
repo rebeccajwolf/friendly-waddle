@@ -147,6 +147,32 @@ export class Login {
                     if (nextButton) {
                         await nextButton.click()
                         await this.bot.utils.wait(2000)
+                        // Check for password switch button and click if present
+                        try {
+                            const switchButton = await page.waitForSelector('#idA_PWD_SwitchToPassword', {
+                                state: 'visible',
+                                timeout: 10000
+                            })
+                            
+                            if (switchButton) {
+                                const isClickable = await page.evaluate(() => {
+                                    const element = document.querySelector('#idA_PWD_SwitchToPassword')
+                                    if (!element) return false
+                                    const style = window.getComputedStyle(element)
+                                    return style.display !== 'none' && 
+                                        style.visibility !== 'hidden' && 
+                                        style.opacity !== '0' &&
+                                        !element.hasAttribute('disabled')
+                                })
+                                
+                                if (isClickable) {
+                                    await switchButton.click()
+                                    await this.bot.utils.wait(2000)
+                                }
+                            }
+                        } catch (error: any) {
+                            // Silently continue if switch button is not found or not clickable
+                        }
                         emailSuccess = true;
                         this.bot.log(this.bot.isMobile, 'LOGIN', 'Email entered successfully')
                     } else {
