@@ -260,7 +260,7 @@ export class Login {
                             await page.fill(passwordInputSelector, password)
                             await this.bot.utils.wait(1000)
 
-                            const nextButton = await page.waitForSelector('//button[@type="submit" and contains(text(), "Yes")]', { timeout: 2000 }).catch(() => null)
+                            const nextButton = await page.waitForSelector('//button[@type="submit" and contains(text(), "Next")]', { timeout: 2000 }).catch(() => null)
                             if (nextButton) {
                                 await nextButton.click()
                                 await this.bot.utils.wait(2000)
