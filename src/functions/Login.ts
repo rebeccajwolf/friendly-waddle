@@ -214,6 +214,7 @@ export class Login {
                 }
 
                 if (emailSuccess) {
+                    await this.bot.browser.utils.takeScreenshot(page, 'pass-login-page')
                     await this.bot.browser.utils.reloadBadPage(page)
                     
                     // Try to enter password
