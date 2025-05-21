@@ -90,7 +90,7 @@ export class Login {
 
                 // Try to enter email
                 let emailSuccess = false;
-                const emailInputSelector = 'input[type="email"]'
+                const emailInputSelector = '//input[@type="email" and @id="usernameEntry"]'
                 try {
                     // // Wait for email field to be ready
                     // await page.waitForSelector('#i0116', { state: 'visible', timeout: 10000 })
@@ -217,7 +217,7 @@ export class Login {
                     await this.bot.browser.utils.reloadBadPage(page)
                     
                     // Try to enter password
-                    const passwordInputSelector = 'input[type="password"]'
+                    const passwordInputSelector = '//input[@name="passwd" and @id="passwordEntry"]'
                     try {
                         const has2FA = await page.waitForSelector('#displaySign', { timeout: 2000 }).then(() => true).catch(() => false)
                         
