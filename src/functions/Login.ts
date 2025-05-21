@@ -143,20 +143,20 @@ export class Login {
                         await this.bot.utils.wait(1000)
                     }
 
-                    const nextButton = await page.waitForSelector('button[type="submit"]', { timeout: 2000 }).catch(() => null)
+                    const nextButton = await page.waitForSelector('//button[@type="submit" and contains(text(), "Next")]', { timeout: 2000 }).catch(() => null)
                     if (nextButton) {
                         await nextButton.click()
                         await this.bot.utils.wait(2000)
                         // Check for password switch button and click if present
                         try {
-                            const switchButton = await page.waitForSelector('#idA_PWD_SwitchToPassword', {
+                            const switchButton = await page.waitForSelector('//span[@role="button" and contains(text(), "password")]', {
                                 state: 'visible',
                                 timeout: 10000
                             })
                             
                             if (switchButton) {
                                 const isClickable = await page.evaluate(() => {
-                                    const element = document.querySelector('#idA_PWD_SwitchToPassword')
+                                    const element = document.querySelector('//span[@role="button" and contains(text(), "password")]')
                                     if (!element) return false
                                     const style = window.getComputedStyle(element)
                                     return style.display !== 'none' && 
@@ -175,14 +175,14 @@ export class Login {
                         }
                         // Check for password switch button and click if present
                         try {
-                            const switchButton = await page.waitForSelector('span[role="button"]', {
+                            const switchButton = await page.waitForSelector('#idA_PWD_SwitchToPassword', {
                                 state: 'visible',
                                 timeout: 10000
                             })
                             
                             if (switchButton) {
                                 const isClickable = await page.evaluate(() => {
-                                    const element = document.querySelector('span[role="button"]')
+                                    const element = document.querySelector('#idA_PWD_SwitchToPassword')
                                     if (!element) return false
                                     const style = window.getComputedStyle(element)
                                     return style.display !== 'none' && 
