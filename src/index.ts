@@ -127,8 +127,8 @@ export class MicrosoftRewardsBot {
                     })()
                 ])
             } else {
-                // this.isMobile = false
-                // await this.Desktop(account)
+                this.isMobile = false
+                await this.Desktop(account)
 
                 this.isMobile = true
                 await this.Mobile(account)

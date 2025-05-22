@@ -142,7 +142,6 @@ export class Login {
                         await page.fill(emailInputSelector, email)
                         await this.bot.utils.wait(1000)
                     }
-                    await this.bot.browser.utils.takeScreenshot(page, 'email_next-login-page')
                     const nextButton = await page.waitForSelector('//button[@type="submit" and contains(text(), "Next")]', { timeout: 2000 }).catch(() => null)
                     if (nextButton) {
                         await nextButton.click()
@@ -156,7 +155,6 @@ export class Login {
                             
                             if (switchButton) {
                                 await switchButton.click()
-                                await this.bot.browser.utils.takeScreenshot(page, 'email_pass_skip-login-page')
                                 await this.bot.utils.wait(2000)
                             }
                         } catch (error: any) {
@@ -203,7 +201,6 @@ export class Login {
                 }
 
                 if (emailSuccess) {
-                    await this.bot.browser.utils.takeScreenshot(page, 'pass-login-page')
                     await this.bot.browser.utils.reloadBadPage(page)
                     
                     // Try to enter password
@@ -257,7 +254,6 @@ export class Login {
                             } else {
                                 this.bot.log(this.bot.isMobile, 'LOGIN', 'Next button not found after password entry', 'warn')
                             }
-                            await this.bot.browser.utils.takeScreenshot(page, 'pass-final-page')
                         } else {
                             await this.handle2FA(page)
                         }
@@ -274,8 +270,6 @@ export class Login {
             // Check if account is locked
             await this.checkAccountLocked(page)
             await this.bot.browser.utils.reloadBadPage(page)
-            await this.bot.browser.utils.tryDismissAllMessages(page)
-            await this.bot.browser.utils.takeScreenshot(page, 'Final-login-page')
             await this.checkLoggedIn(page) 
                 // If we reach here, login was successful
                 return;
