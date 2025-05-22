@@ -273,6 +273,7 @@ export class Login {
             // Check if account is locked
             await this.checkAccountLocked(page)
             await this.bot.browser.utils.reloadBadPage(page)
+            await this.bot.browser.utils.tryDismissAllMessages(page)
             await this.bot.browser.utils.takeScreenshot(page, 'Final-login-page')
             await this.checkLoggedIn(page) 
                 // If we reach here, login was successful
