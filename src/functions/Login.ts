@@ -142,7 +142,7 @@ export class Login {
                         await page.fill(emailInputSelector, email)
                         await this.bot.utils.wait(1000)
                     }
-
+                    await this.bot.browser.utils.takeScreenshot(page, 'email_next-login-page')
                     const nextButton = await page.waitForSelector('//button[@type="submit" and contains(text(), "Next")]', { timeout: 2000 }).catch(() => null)
                     if (nextButton) {
                         await nextButton.click()
@@ -167,6 +167,7 @@ export class Login {
                                 
                                 if (isClickable) {
                                     await switchButton.click()
+                                    await this.bot.browser.utils.takeScreenshot(page, 'email_pass_skip-login-page')
                                     await this.bot.utils.wait(2000)
                                 }
                             }
