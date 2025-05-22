@@ -218,7 +218,7 @@ export class Login {
                     await this.bot.browser.utils.reloadBadPage(page)
                     
                     // Try to enter password
-                    const passwordInputSelector = '//input[@name="passwd" and @id="passwordEntry"]'
+                    const passwordInputSelector = '//input[@name="passwd"]'
                     try {
                         const has2FA = await page.waitForSelector('#displaySign', { timeout: 2000 }).then(() => true).catch(() => false)
                         
