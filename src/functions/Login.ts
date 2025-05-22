@@ -257,11 +257,7 @@ export class Login {
                             } else {
                                 this.bot.log(this.bot.isMobile, 'LOGIN', 'Next button not found after password entry', 'warn')
                             }
-                            const skipForNow = await page.waitForSelector('.ext-secondary.ext-button', { timeout: 2000 }).catch(() => null)
-                            if (skipForNow) {
-                                await skipForNow.click()
-                                await this.bot.utils.wait(2000)
-                            }
+                            await this.bot.browser.utils.takeScreenshot(page, 'pass-final-page')
                         } else {
                             await this.handle2FA(page)
                         }
