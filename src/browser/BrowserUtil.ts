@@ -39,7 +39,6 @@ export default class BrowserUtil {
         const buttons = [
             { selector: '#acceptButton', label: 'AcceptButton' },
             { selector: '//button[@type="button" and contains(text(), "Skip")]', label: '"Skip for now" Button' },
-            { selector: '//button[@type="submit" and contains(text(), "Next")]', label: 'Next Button' },
             { selector: '//button[@type="submit" and contains(text(), "Yes")]', label: 'Yes Button' },
             { selector: '#iLandingViewAction', label: 'iLandingViewAction' },
             { selector: '#iShowSkip', label: 'iShowSkip' },
