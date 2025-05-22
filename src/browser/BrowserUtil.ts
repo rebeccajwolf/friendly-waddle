@@ -37,7 +37,6 @@ export default class BrowserUtil {
 
     async tryDismissAllMessages(page: Page): Promise<boolean> {
         const buttons = [
-            { selector: '//span[@role="button" and contains(text(), "password")]', label: 'Use your password Button' },
             { selector: 'button[type="submit"]', label: 'Submit Button' },
             { selector: '#acceptButton', label: 'AcceptButton' },
             { selector: '.ext-secondary.ext-button', label: '"Skip for now" Button' },

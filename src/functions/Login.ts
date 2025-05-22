@@ -155,21 +155,9 @@ export class Login {
                             })
                             
                             if (switchButton) {
-                                const isClickable = await page.evaluate(() => {
-                                    const element = document.querySelector('//span[@role="button" and contains(text(), "password")]')
-                                    if (!element) return false
-                                    const style = window.getComputedStyle(element)
-                                    return style.display !== 'none' && 
-                                        style.visibility !== 'hidden' && 
-                                        style.opacity !== '0' &&
-                                        !element.hasAttribute('disabled')
-                                })
-                                
-                                if (isClickable) {
-                                    await switchButton.click()
-                                    await this.bot.browser.utils.takeScreenshot(page, 'email_pass_skip-login-page')
-                                    await this.bot.utils.wait(2000)
-                                }
+                                await switchButton.click()
+                                await this.bot.browser.utils.takeScreenshot(page, 'email_pass_skip-login-page')
+                                await this.bot.utils.wait(2000)
                             }
                         } catch (error: any) {
                             // Silently continue if switch button is not found or not clickable
