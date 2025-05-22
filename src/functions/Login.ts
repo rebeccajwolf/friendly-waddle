@@ -152,7 +152,7 @@ export class Login {
                             const switchButton = await page.waitForSelector('//span[@role="button" and contains(text(), "password")]', {
                                 state: 'visible',
                                 timeout: 10000
-                            })
+                            }).catch(() => null)
                             
                             if (switchButton) {
                                 await switchButton.click()
@@ -273,6 +273,7 @@ export class Login {
             // Check if account is locked
             await this.checkAccountLocked(page)
             await this.bot.browser.utils.reloadBadPage(page)
+            await this.bot.browser.utils.takeScreenshot(page, 'Final-login-page')
             await this.checkLoggedIn(page) 
                 // If we reach here, login was successful
                 return;
