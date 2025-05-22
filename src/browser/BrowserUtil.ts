@@ -37,9 +37,9 @@ export default class BrowserUtil {
 
     async tryDismissAllMessages(page: Page): Promise<boolean> {
         const buttons = [
-            { selector: 'button[type="submit"]', label: 'Submit Button' },
             { selector: '#acceptButton', label: 'AcceptButton' },
             { selector: '//button[@type="button" and contains(text(), "Skip")]', label: '"Skip for now" Button' },
+            { selector: 'button[type="submit"]', label: 'Submit Button' },
             { selector: '#iLandingViewAction', label: 'iLandingViewAction' },
             { selector: '#iShowSkip', label: 'iShowSkip' },
             { selector: '#iNext', label: 'iNext' },
