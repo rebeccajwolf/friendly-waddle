@@ -246,32 +246,6 @@ export class Login {
                             // await page.click('#idSIButton9')
                             // await this.bot.utils.wait(2000)
                             // this.bot.log(this.bot.isMobile, 'LOGIN', 'Password entered successfully')
-                            // Check for password switch button and click if present
-                            try {
-                                const switchButton = await page.waitForSelector('//span[@role="button" and contains(text(), "password")]', {
-                                    state: 'visible',
-                                    timeout: 10000
-                                })
-                                
-                                if (switchButton) {
-                                    const isClickable = await page.evaluate(() => {
-                                        const element = document.querySelector('//span[@role="button" and contains(text(), "password")]')
-                                        if (!element) return false
-                                        const style = window.getComputedStyle(element)
-                                        return style.display !== 'none' && 
-                                            style.visibility !== 'hidden' && 
-                                            style.opacity !== '0' &&
-                                            !element.hasAttribute('disabled')
-                                    })
-                                    
-                                    if (isClickable) {
-                                        await switchButton.click()
-                                        await this.bot.utils.wait(2000)
-                                    }
-                                }
-                            } catch (error: any) {
-                                // Silently continue if switch button is not found or not clickable
-                            }
                             // Wait for password field
                             const passwordField = await page.waitForSelector(passwordInputSelector, { state: 'visible', timeout: 10000 }).catch(() => null)
                             if (!passwordField) {
