@@ -32,7 +32,7 @@ export class Login {
 
         try {
             // Navigate to the Bing login page
-            await page.goto('http://rewards.bing.com/signin')
+            await page.goto('https://rewards.bing.com/signin')
 
             // await this.bot.browser.utils.takeScreenshot(page, 'main-login-page')
 
