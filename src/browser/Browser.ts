@@ -41,6 +41,7 @@ class Browser {
                 '--ozone-platform=wayland',
                 '--enable-wayland-ime',
                 '--disable-gpu',
+                '--dns-prefetch-disable',
                 '--disable-component-update',
                 '--disable-software-rasterizer',
                 '--disable-dev-shm-usage'
