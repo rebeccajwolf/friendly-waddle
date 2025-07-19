@@ -25,6 +25,7 @@ class Browser {
     }
 
     async createBrowser(proxy: AccountProxy, email: string): Promise<BrowserContext> {
+        const hostRules = process.env.CHROME_HOST_RULES
         const browser = await playwright.chromium.launch({
             //channel: 'msedge', // Uses Edge instead of chrome
             headless: this.bot.config.headless,
@@ -41,10 +42,10 @@ class Browser {
                 '--ozone-platform=wayland',
                 '--enable-wayland-ime',
                 '--disable-gpu',
-                '--dns-prefetch-disable',
                 '--disable-component-update',
                 '--disable-software-rasterizer',
-                '--disable-dev-shm-usage'
+                '--disable-dev-shm-usage',
+                `--host-rules=${hostRules}`
             ]
         })
 
