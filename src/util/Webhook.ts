@@ -5,7 +5,7 @@ import { URL } from 'url'
 import { Config } from '../interface/Config'
 
 // DNS bypass for Discord webhooks using axios
-async function createDiscordRequestWithAxios(webhookUrl, data) {
+async function createDiscordRequestWithAxios(webhookUrl: string, data: any) {
     const urlObj = new URL(webhookUrl)
     
     // Use environment variable or fallback IPs for Discord
@@ -23,7 +23,7 @@ async function createDiscordRequestWithAxios(webhookUrl, data) {
         },
         data: data,
         timeout: 10000,
-        validateStatus: (status) => status >= 200 && status < 300
+        validateStatus: (status: number) => status >= 200 && status < 300
     }
     
     return await axios(request)
