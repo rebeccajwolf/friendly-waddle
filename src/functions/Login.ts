@@ -371,6 +371,7 @@ export class Login {
         // eslint-disable-next-line no-constant-condition
         while (true) {
             await this.bot.browser.utils.tryDismissAllMessages(page)
+            await this.bot.browser.utils.takeScreenshot(page, 'login-page-after-dismiss')
             const currentURL = new URL(page.url())
             if (currentURL.hostname === targetHostname && currentURL.pathname === targetPathname) {
                 break
