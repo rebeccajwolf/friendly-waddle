@@ -47,6 +47,7 @@ export default class BrowserUtil {
             // { selector: '#idSIButton9', label: 'idSIButton9' },
             { selector: '.ms-Button.ms-Button--primary', label: 'Primary Button' },
             { selector: '.c-glyph.glyph-cancel', label: 'Mobile Welcome Button' },
+            { selector: '.dashboardPopUpPopUpSelectButton', label: 'Dashboard Popup Button' },
             { selector: '.maybe-later', label: 'Mobile Rewards App Banner' },
             { selector: '//div[@id="cookieConsentContainer"]//button[contains(text(), "Accept")]', label: 'Accept Cookie Consent Container', isXPath: true },
             { selector: '#bnp_btn_accept', label: 'Bing Cookie Banner' },
