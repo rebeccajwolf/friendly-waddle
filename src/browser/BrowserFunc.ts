@@ -12,48 +12,60 @@ import type { AppDashboardData } from '../interface/AppDashBoardData'
 
 export default class BrowserFunc {
     private bot: MicrosoftRewardsBot
-    private hostRulesMap: Map<string, string>
+    private hostRulesMap: Map<string, string> | null = null
 
     constructor(bot: MicrosoftRewardsBot) {
         this.bot = bot
-        this.hostRulesMap = this.parseHostRules()
     }
 
     private parseHostRules(): Map<string, string> {
+        if (this.hostRulesMap !== null) {
+            return this.hostRulesMap
+        }
+
         const hostRules = process.env.CHROME_HOST_RULES || ''
         const rulesMap = new Map<string, string>()
 
-        this.bot.logger.info(
-            this.bot.isMobile,
-            'PARSE-HOST-RULES',
-            `Raw CHROME_HOST_RULES env: "${hostRules}"`
-        )
-
-        if (!hostRules || hostRules.trim().length === 0) {
-            this.bot.logger.warn(
+        if (this.bot.logger && this.bot.config) {
+            this.bot.logger.info(
                 this.bot.isMobile,
                 'PARSE-HOST-RULES',
-                'CHROME_HOST_RULES not configured or empty'
+                `Raw CHROME_HOST_RULES env: "${hostRules}"`
             )
+        }
+
+        if (!hostRules || hostRules.trim().length === 0) {
+            if (this.bot.logger && this.bot.config) {
+                this.bot.logger.warn(
+                    this.bot.isMobile,
+                    'PARSE-HOST-RULES',
+                    'CHROME_HOST_RULES not configured or empty'
+                )
+            }
+            this.hostRulesMap = rulesMap
             return rulesMap
         }
 
         const rules = hostRules.split(',').map(r => r.trim()).filter(r => r.length > 0)
 
-        this.bot.logger.info(
-            this.bot.isMobile,
-            'PARSE-HOST-RULES',
-            `Found ${rules.length} rules to parse`
-        )
+        if (this.bot.logger && this.bot.config) {
+            this.bot.logger.info(
+                this.bot.isMobile,
+                'PARSE-HOST-RULES',
+                `Found ${rules.length} rules to parse`
+            )
+        }
 
         for (const rule of rules) {
             const parts = rule.split(/\s+/).filter(p => p.length > 0)
 
-            this.bot.logger.debug(
-                this.bot.isMobile,
-                'PARSE-HOST-RULES',
-                `Processing rule: "${rule}" | Parts count: ${parts.length}`
-            )
+            if (this.bot.logger && this.bot.config) {
+                this.bot.logger.debug(
+                    this.bot.isMobile,
+                    'PARSE-HOST-RULES',
+                    `Processing rule: "${rule}" | Parts count: ${parts.length}`
+                )
+            }
 
             if (parts.length >= 3 && parts[0] && parts[0].toUpperCase() === 'MAP') {
                 const originalDomain = parts[1]
@@ -62,48 +74,59 @@ export default class BrowserFunc {
                 if (originalDomain && mappedHost) {
                     rulesMap.set(originalDomain, mappedHost)
 
-                    this.bot.logger.info(
-                        this.bot.isMobile,
-                        'PARSE-HOST-RULES',
-                        `✓ Successfully parsed: ${originalDomain} -> ${mappedHost}`
-                    )
+                    if (this.bot.logger && this.bot.config) {
+                        this.bot.logger.info(
+                            this.bot.isMobile,
+                            'PARSE-HOST-RULES',
+                            `✓ Successfully parsed: ${originalDomain} -> ${mappedHost}`
+                        )
+                    }
                 }
             } else {
-                this.bot.logger.warn(
+                if (this.bot.logger && this.bot.config) {
+                    this.bot.logger.warn(
+                        this.bot.isMobile,
+                        'PARSE-HOST-RULES',
+                        `✗ Invalid format: "${rule}" | Expected: MAP domain ip | Parts: ${parts.join(', ')}`
+                    )
+                }
+            }
+        }
+
+        if (this.bot.logger && this.bot.config) {
+            this.bot.logger.info(
+                this.bot.isMobile,
+                'PARSE-HOST-RULES',
+                `✓ COMPLETED: Parsed ${rulesMap.size} host rules total`
+            )
+
+            if (rulesMap.size > 0) {
+                const rulesDebug = Array.from(rulesMap.entries())
+                    .map(([domain, ip]) => `${domain}->${ip}`)
+                    .join(' | ')
+                this.bot.logger.info(
                     this.bot.isMobile,
                     'PARSE-HOST-RULES',
-                    `✗ Invalid format: "${rule}" | Expected: MAP domain ip | Parts: ${parts.join(', ')}`
+                    `Host rules mapping: ${rulesDebug}`
                 )
             }
         }
 
-        this.bot.logger.info(
-            this.bot.isMobile,
-            'PARSE-HOST-RULES',
-            `✓ COMPLETED: Parsed ${rulesMap.size} host rules total`
-        )
-
-        if (rulesMap.size > 0) {
-            const rulesDebug = Array.from(rulesMap.entries())
-                .map(([domain, ip]) => `${domain}->${ip}`)
-                .join(' | ')
-            this.bot.logger.info(
-                this.bot.isMobile,
-                'PARSE-HOST-RULES',
-                `Host rules mapping: ${rulesDebug}`
-            )
-        }
-
+        this.hostRulesMap = rulesMap
         return rulesMap
     }
 
     private applyHostRules(url: string): string {
-        if (this.hostRulesMap.size === 0) {
-            this.bot.logger.debug(
-                this.bot.isMobile,
-                'APPLY-HOST-RULES',
-                `No host rules configured, using original URL: ${url}`
-            )
+        const rulesMap = this.parseHostRules()
+
+        if (rulesMap.size === 0) {
+            if (this.bot.logger && this.bot.config) {
+                this.bot.logger.debug(
+                    this.bot.isMobile,
+                    'APPLY-HOST-RULES',
+                    `No host rules configured, using original URL: ${url}`
+                )
+            }
             return url
         }
 
@@ -111,22 +134,26 @@ export default class BrowserFunc {
             const urlObj = new URL(url)
             const hostname = urlObj.hostname
 
-            this.bot.logger.debug(
-                this.bot.isMobile,
-                'APPLY-HOST-RULES',
-                `Processing URL: ${url} | Hostname: ${hostname}`
-            )
-
-            let ruleApplied = false
-
-            for (const [originalDomain, mappedHost] of this.hostRulesMap.entries()) {
-                const isMatch = hostname === originalDomain || hostname.endsWith(`.${originalDomain}`)
-
+            if (this.bot.logger && this.bot.config) {
                 this.bot.logger.debug(
                     this.bot.isMobile,
                     'APPLY-HOST-RULES',
-                    `Checking rule: ${originalDomain} -> ${mappedHost} | Match: ${isMatch}`
+                    `Processing URL: ${url} | Hostname: ${hostname}`
                 )
+            }
+
+            let ruleApplied = false
+
+            for (const [originalDomain, mappedHost] of rulesMap.entries()) {
+                const isMatch = hostname === originalDomain || hostname.endsWith(`.${originalDomain}`)
+
+                if (this.bot.logger && this.bot.config) {
+                    this.bot.logger.debug(
+                        this.bot.isMobile,
+                        'APPLY-HOST-RULES',
+                        `Checking rule: ${originalDomain} -> ${mappedHost} | Match: ${isMatch}`
+                    )
+                }
 
                 if (isMatch) {
                     const originalUrl = urlObj.toString()
@@ -142,39 +169,47 @@ export default class BrowserFunc {
 
                         const transformedUrl = urlObj.toString()
 
-                        this.bot.logger.info(
-                            this.bot.isMobile,
-                            'APPLY-HOST-RULES',
-                            `✓ RULE APPLIED: ${originalDomain} -> ${mappedHost} | Original: ${originalUrl} | Transformed: ${transformedUrl}`
-                        )
+                        if (this.bot.logger && this.bot.config) {
+                            this.bot.logger.info(
+                                this.bot.isMobile,
+                                'APPLY-HOST-RULES',
+                                `✓ RULE APPLIED: ${originalDomain} -> ${mappedHost} | Original: ${originalUrl} | Transformed: ${transformedUrl}`
+                            )
+                        }
 
                         ruleApplied = true
                         break
                     } catch (hostError) {
-                        this.bot.logger.error(
-                            this.bot.isMobile,
-                            'APPLY-HOST-RULES',
-                            `Failed to apply host: ${mappedHost} | Error: ${hostError instanceof Error ? hostError.message : String(hostError)}`
-                        )
+                        if (this.bot.logger && this.bot.config) {
+                            this.bot.logger.error(
+                                this.bot.isMobile,
+                                'APPLY-HOST-RULES',
+                                `Failed to apply host: ${mappedHost} | Error: ${hostError instanceof Error ? hostError.message : String(hostError)}`
+                            )
+                        }
                     }
                 }
             }
 
             if (!ruleApplied) {
-                this.bot.logger.warn(
-                    this.bot.isMobile,
-                    'APPLY-HOST-RULES',
-                    `No matching rule found for hostname: ${hostname} | URL: ${url}`
-                )
+                if (this.bot.logger && this.bot.config) {
+                    this.bot.logger.warn(
+                        this.bot.isMobile,
+                        'APPLY-HOST-RULES',
+                        `No matching rule found for hostname: ${hostname} | URL: ${url}`
+                    )
+                }
             }
 
             return urlObj.toString()
         } catch (error) {
-            this.bot.logger.error(
-                this.bot.isMobile,
-                'APPLY-HOST-RULES',
-                `Failed to parse URL: ${url} | Error: ${error instanceof Error ? error.message : String(error)}`
-            )
+            if (this.bot.logger && this.bot.config) {
+                this.bot.logger.error(
+                    this.bot.isMobile,
+                    'APPLY-HOST-RULES',
+                    `Failed to parse URL: ${url} | Error: ${error instanceof Error ? error.message : String(error)}`
+                )
+            }
             return url
         }
     }
