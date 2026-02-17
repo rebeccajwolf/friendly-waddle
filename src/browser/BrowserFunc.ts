@@ -56,7 +56,13 @@ export default class BrowserFunc {
             for (const [originalDomain, mappedHost] of this.hostRulesMap.entries()) {
                 if (hostname === originalDomain || hostname.endsWith(`.${originalDomain}`)) {
                     const originalUrl = urlObj.toString()
-                    urlObj.hostname = mappedHost
+
+                    if (mappedHost.includes(':') && !mappedHost.startsWith('[')) {
+                        urlObj.hostname = `[${mappedHost}]`
+                    } else {
+                        urlObj.hostname = mappedHost
+                    }
+
                     const transformedUrl = urlObj.toString()
                     this.bot.logger.debug(
                         this.bot.isMobile,
