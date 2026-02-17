@@ -23,20 +23,73 @@ export default class BrowserFunc {
         const hostRules = process.env.CHROME_HOST_RULES || ''
         const rulesMap = new Map<string, string>()
 
-        if (!hostRules) {
+        this.bot.logger.info(
+            this.bot.isMobile,
+            'PARSE-HOST-RULES',
+            `Raw CHROME_HOST_RULES env: "${hostRules}"`
+        )
+
+        if (!hostRules || hostRules.trim().length === 0) {
+            this.bot.logger.warn(
+                this.bot.isMobile,
+                'PARSE-HOST-RULES',
+                'CHROME_HOST_RULES not configured or empty'
+            )
             return rulesMap
         }
 
-        const rules = hostRules.split(',').map(r => r.trim())
+        const rules = hostRules.split(',').map(r => r.trim()).filter(r => r.length > 0)
+
+        this.bot.logger.info(
+            this.bot.isMobile,
+            'PARSE-HOST-RULES',
+            `Found ${rules.length} rules to parse`
+        )
+
         for (const rule of rules) {
-            const parts = rule.split(/\s+/)
-            if (parts.length >= 3 && parts[0]?.toUpperCase() === 'MAP') {
-                const originalDomain = parts[1]?.trim()
-                const mappedHost = parts[2]?.trim()
-                if (originalDomain && mappedHost) {
-                    rulesMap.set(originalDomain, mappedHost)
-                }
+            const parts = rule.split(/\s+/).filter(p => p.length > 0)
+
+            this.bot.logger.debug(
+                this.bot.isMobile,
+                'PARSE-HOST-RULES',
+                `Processing rule: "${rule}" | Parts count: ${parts.length}`
+            )
+
+            if (parts.length >= 3 && parts[0].toUpperCase() === 'MAP') {
+                const originalDomain = parts[1]
+                const mappedHost = parts[2]
+
+                rulesMap.set(originalDomain, mappedHost)
+
+                this.bot.logger.info(
+                    this.bot.isMobile,
+                    'PARSE-HOST-RULES',
+                    `✓ Successfully parsed: ${originalDomain} -> ${mappedHost}`
+                )
+            } else {
+                this.bot.logger.warn(
+                    this.bot.isMobile,
+                    'PARSE-HOST-RULES',
+                    `✗ Invalid format: "${rule}" | Expected: MAP domain ip | Parts: ${parts.join(', ')}`
+                )
             }
+        }
+
+        this.bot.logger.info(
+            this.bot.isMobile,
+            'PARSE-HOST-RULES',
+            `✓ COMPLETED: Parsed ${rulesMap.size} host rules total`
+        )
+
+        if (rulesMap.size > 0) {
+            const rulesDebug = Array.from(rulesMap.entries())
+                .map(([domain, ip]) => `${domain}->${ip}`)
+                .join(' | ')
+            this.bot.logger.info(
+                this.bot.isMobile,
+                'PARSE-HOST-RULES',
+                `Host rules mapping: ${rulesDebug}`
+            )
         }
 
         return rulesMap
@@ -44,53 +97,93 @@ export default class BrowserFunc {
 
     private applyHostRules(url: string): string {
         if (this.hostRulesMap.size === 0) {
-            this.bot.logger.debug(this.bot.isMobile, 'APPLY-HOST-RULES', `No host rules configured, using original URL: ${url}`)
+            this.bot.logger.debug(
+                this.bot.isMobile,
+                'APPLY-HOST-RULES',
+                `No host rules configured, using original URL: ${url}`
+            )
             return url
         }
 
         try {
             const urlObj = new URL(url)
             const hostname = urlObj.hostname
+
+            this.bot.logger.debug(
+                this.bot.isMobile,
+                'APPLY-HOST-RULES',
+                `Processing URL: ${url} | Hostname: ${hostname}`
+            )
+
             let ruleApplied = false
 
             for (const [originalDomain, mappedHost] of this.hostRulesMap.entries()) {
-                if (hostname === originalDomain || hostname.endsWith(`.${originalDomain}`)) {
+                const isMatch = hostname === originalDomain || hostname.endsWith(`.${originalDomain}`)
+
+                this.bot.logger.debug(
+                    this.bot.isMobile,
+                    'APPLY-HOST-RULES',
+                    `Checking rule: ${originalDomain} -> ${mappedHost} | Match: ${isMatch}`
+                )
+
+                if (isMatch) {
                     const originalUrl = urlObj.toString()
 
-                    if (mappedHost.includes(':') && !mappedHost.startsWith('[')) {
-                        urlObj.hostname = `[${mappedHost}]`
-                    } else {
-                        urlObj.hostname = mappedHost
-                    }
+                    try {
+                        if (this.isIPv6(mappedHost)) {
+                            urlObj.hostname = mappedHost
+                        } else if (this.isIPv4(mappedHost)) {
+                            urlObj.hostname = mappedHost
+                        } else {
+                            urlObj.hostname = mappedHost
+                        }
 
-                    const transformedUrl = urlObj.toString()
-                    this.bot.logger.debug(
-                        this.bot.isMobile,
-                        'APPLY-HOST-RULES',
-                        `Host rule applied: ${originalDomain} -> ${mappedHost} | Original: ${originalUrl} | Transformed: ${transformedUrl}`
-                    )
-                    ruleApplied = true
-                    break
+                        const transformedUrl = urlObj.toString()
+
+                        this.bot.logger.info(
+                            this.bot.isMobile,
+                            'APPLY-HOST-RULES',
+                            `✓ RULE APPLIED: ${originalDomain} -> ${mappedHost} | Original: ${originalUrl} | Transformed: ${transformedUrl}`
+                        )
+
+                        ruleApplied = true
+                        break
+                    } catch (hostError) {
+                        this.bot.logger.error(
+                            this.bot.isMobile,
+                            'APPLY-HOST-RULES',
+                            `Failed to apply host: ${mappedHost} | Error: ${hostError instanceof Error ? hostError.message : String(hostError)}`
+                        )
+                    }
                 }
             }
 
             if (!ruleApplied) {
-                this.bot.logger.debug(
+                this.bot.logger.warn(
                     this.bot.isMobile,
                     'APPLY-HOST-RULES',
-                    `No matching host rule for URL: ${url}`
+                    `No matching rule found for hostname: ${hostname} | URL: ${url}`
                 )
             }
 
             return urlObj.toString()
         } catch (error) {
-            this.bot.logger.debug(
+            this.bot.logger.error(
                 this.bot.isMobile,
                 'APPLY-HOST-RULES',
                 `Failed to parse URL: ${url} | Error: ${error instanceof Error ? error.message : String(error)}`
             )
             return url
         }
+    }
+
+    private isIPv4(host: string): boolean {
+        const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/
+        return ipv4Regex.test(host)
+    }
+
+    private isIPv6(host: string): boolean {
+        return host.includes(':')
     }
 
     /**
