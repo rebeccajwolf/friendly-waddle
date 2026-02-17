@@ -55,17 +55,19 @@ export default class BrowserFunc {
                 `Processing rule: "${rule}" | Parts count: ${parts.length}`
             )
 
-            if (parts.length >= 3 && parts[0].toUpperCase() === 'MAP') {
+            if (parts.length >= 3 && parts[0] && parts[0].toUpperCase() === 'MAP') {
                 const originalDomain = parts[1]
                 const mappedHost = parts[2]
 
-                rulesMap.set(originalDomain, mappedHost)
+                if (originalDomain && mappedHost) {
+                    rulesMap.set(originalDomain, mappedHost)
 
-                this.bot.logger.info(
-                    this.bot.isMobile,
-                    'PARSE-HOST-RULES',
-                    `✓ Successfully parsed: ${originalDomain} -> ${mappedHost}`
-                )
+                    this.bot.logger.info(
+                        this.bot.isMobile,
+                        'PARSE-HOST-RULES',
+                        `✓ Successfully parsed: ${originalDomain} -> ${mappedHost}`
+                    )
+                }
             } else {
                 this.bot.logger.warn(
                     this.bot.isMobile,
