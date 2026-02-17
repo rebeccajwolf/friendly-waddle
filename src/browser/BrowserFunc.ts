@@ -30,10 +30,12 @@ export default class BrowserFunc {
         const rules = hostRules.split(',').map(r => r.trim())
         for (const rule of rules) {
             const parts = rule.split(/\s+/)
-            if (parts.length >= 3 && parts[0].toUpperCase() === 'MAP') {
-                const originalDomain = parts[1].trim()
-                const mappedHost = parts[2].trim()
-                rulesMap.set(originalDomain, mappedHost)
+            if (parts.length >= 3 && parts[0]?.toUpperCase() === 'MAP') {
+                const originalDomain = parts[1]?.trim()
+                const mappedHost = parts[2]?.trim()
+                if (originalDomain && mappedHost) {
+                    rulesMap.set(originalDomain, mappedHost)
+                }
             }
         }
 
