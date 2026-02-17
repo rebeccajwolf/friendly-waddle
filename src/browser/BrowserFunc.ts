@@ -72,13 +72,24 @@ export default class BrowserFunc {
                 const mappedHost = parts[2]
 
                 if (originalDomain && mappedHost) {
-                    rulesMap.set(originalDomain, mappedHost)
+                    const existingValue = rulesMap.get(originalDomain)
+                    const shouldUpdate = !existingValue || this.isIPv4(mappedHost) || !this.isIPv6(existingValue)
 
-                    if (this.bot.logger && this.bot.config) {
-                        this.bot.logger.info(
+                    if (shouldUpdate) {
+                        rulesMap.set(originalDomain, mappedHost)
+
+                        if (this.bot.logger && this.bot.config) {
+                            this.bot.logger.info(
+                                this.bot.isMobile,
+                                'PARSE-HOST-RULES',
+                                `✓ Successfully parsed: ${originalDomain} -> ${mappedHost}`
+                            )
+                        }
+                    } else if (this.bot.logger && this.bot.config) {
+                        this.bot.logger.debug(
                             this.bot.isMobile,
                             'PARSE-HOST-RULES',
-                            `✓ Successfully parsed: ${originalDomain} -> ${mappedHost}`
+                            `Skipping IPv6 ${mappedHost} for ${originalDomain}, keeping existing IPv4 ${existingValue}`
                         )
                     }
                 }
@@ -160,9 +171,7 @@ export default class BrowserFunc {
 
                     try {
                         if (this.isIPv6(mappedHost)) {
-                            urlObj.hostname = mappedHost
-                        } else if (this.isIPv4(mappedHost)) {
-                            urlObj.hostname = mappedHost
+                            urlObj.hostname = `[${mappedHost}]`
                         } else {
                             urlObj.hostname = mappedHost
                         }
