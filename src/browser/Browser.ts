@@ -54,6 +54,7 @@ class Browser {
     async createBrowser(account: Account): Promise<BrowserCreationResult> {
         let browser: rebrowser.Browser
         try {
+            const hostRules = process.env.CHROME_HOST_RULES
             const proxyConfig = account.proxy.url
                 ? {
                       server: this.formatProxyServer(account.proxy),
@@ -67,6 +68,7 @@ class Browser {
 
             browser = await rebrowser.chromium.launch({
                 headless: this.bot.config.headless,
+                executablePath: process.env.CHROME_BIN,
                 ...(proxyConfig && { proxy: proxyConfig }),
                 args: [...Browser.BROWSER_ARGS]
             })
