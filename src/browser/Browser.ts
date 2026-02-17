@@ -44,7 +44,7 @@ class Browser {
         '--disable-component-update',
         '--disable-software-rasterizer',
         '--disable-dev-shm-usage',
-        `--host-rules=${hostRules}`
+        `--host-rules=${process.env.CHROME_HOST_RULES}`
     ] as const
 
     constructor(bot: MicrosoftRewardsBot) {
@@ -54,7 +54,6 @@ class Browser {
     async createBrowser(account: Account): Promise<BrowserCreationResult> {
         let browser: rebrowser.Browser
         try {
-            const hostRules = process.env.CHROME_HOST_RULES
             const proxyConfig = account.proxy.url
                 ? {
                       server: this.formatProxyServer(account.proxy),
