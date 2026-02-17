@@ -1,18 +1,9 @@
-#!/bin/bash
-
-# Makes accounts.json
-
-cat > /home/user/app/src/accounts.json <<EOF
-${ACCOUNTS}
-EOF
-
-cat > /home/user/app/src/config.json <<EOF
 {
     "baseURL": "https://rewards.bing.com",
     "sessionPath": "sessions",
     "headless": false,
-    "clusters": 2,
-    "errorDiagnostics": true,
+    "clusters": 1,
+    "errorDiagnostics": false,
     "workers": {
         "doDailySet": true,
         "doSpecialPromotions": true,
@@ -25,23 +16,23 @@ cat > /home/user/app/src/config.json <<EOF
         "doReadToEarn": true
     },
     "searchOnBingLocalQueries": false,
-    "globalTimeout": "600sec",
+    "globalTimeout": "30sec",
     "searchSettings": {
-        "scrollRandomResults": true,
-        "clickRandomResults": true,
+        "scrollRandomResults": false,
+        "clickRandomResults": false,
         "parallelSearching": true,
         "queryEngines": ["google", "wikipedia", "reddit", "local"],
-        "searchResultVisitTime": "30sec",
+        "searchResultVisitTime": "10sec",
         "searchDelay": {
-            "min": "17min",
-            "max": "27min"
+            "min": "30sec",
+            "max": "1min"
         },
         "readDelay": {
-            "min": "3min",
-            "max": "5min"
+            "min": "30sec",
+            "max": "1min"
         }
     },
-    "debugLogs": true,
+    "debugLogs": false,
     "consoleLogFilter": {
         "enabled": false,
         "mode": "whitelist",
@@ -54,8 +45,8 @@ cat > /home/user/app/src/config.json <<EOF
     },
     "webhook": {
         "discord": {
-            "enabled": true,
-            "url": "${TOKEN}"
+            "enabled": false,
+            "url": ""
         },
         "ntfy": {
             "enabled": false,
@@ -75,4 +66,3 @@ cat > /home/user/app/src/config.json <<EOF
         }
     }
 }
-EOF
