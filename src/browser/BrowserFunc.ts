@@ -137,7 +137,7 @@ export default class BrowserFunc {
         return rulesMap
     }
 
-    private applyHostRules(url: string): string {
+    private applyHostRules(url: string): { url: string; originalHostname?: string } {
         const rulesMap = this.parseHostRules()
 
         if (rulesMap.size === 0) {
@@ -148,7 +148,7 @@ export default class BrowserFunc {
                     `No host rules configured, using original URL: ${url}`
                 )
             }
-            return url
+            return { url }
         }
 
         try {
@@ -164,6 +164,7 @@ export default class BrowserFunc {
             }
 
             let ruleApplied = false
+            let originalHostname: string | undefined
 
             for (const [originalDomain, mappedHost] of rulesMap.entries()) {
                 const isMatch = hostname === originalDomain || hostname.endsWith(`.${originalDomain}`)
@@ -178,6 +179,7 @@ export default class BrowserFunc {
 
                 if (isMatch) {
                     const originalUrl = urlObj.toString()
+                    originalHostname = hostname
 
                     try {
                         if (this.isIPv6(mappedHost)) {
@@ -220,7 +222,7 @@ export default class BrowserFunc {
                 }
             }
 
-            return urlObj.toString()
+            return { url: urlObj.toString(), originalHostname }
         } catch (error) {
             if (this.bot.logger && this.bot.config) {
                 this.bot.logger.error(
@@ -229,7 +231,7 @@ export default class BrowserFunc {
                     `Failed to parse URL: ${url} | Error: ${error instanceof Error ? error.message : String(error)}`
                 )
             }
-            return url
+            return { url }
         }
     }
 
@@ -248,19 +250,29 @@ export default class BrowserFunc {
      */
     async getDashboardData(): Promise<DashboardData> {
         try {
+            const urlResult = this.applyHostRules('https://rewards.bing.com/api/getuserinfo?type=1')
+            const refererResult = this.applyHostRules('https://rewards.bing.com/')
+            const originResult = this.applyHostRules('https://rewards.bing.com')
+
+            const headers: any = {
+                ...(this.bot.fingerprint?.headers ?? {}),
+                Cookie: this.buildCookieHeader(this.bot.cookies.mobile, [
+                    'bing.com',
+                    'live.com',
+                    'microsoftonline.com'
+                ]),
+                Referer: refererResult.url,
+                Origin: originResult.url
+            }
+
+            if (urlResult.originalHostname) {
+                headers['Host'] = urlResult.originalHostname
+            }
+
             const request: AxiosRequestConfig = {
-                url: this.applyHostRules('https://rewards.bing.com/api/getuserinfo?type=1'),
+                url: urlResult.url,
                 method: 'GET',
-                headers: {
-                    ...(this.bot.fingerprint?.headers ?? {}),
-                    Cookie: this.buildCookieHeader(this.bot.cookies.mobile, [
-                        'bing.com',
-                        'live.com',
-                        'microsoftonline.com'
-                    ]),
-                    Referer: this.applyHostRules('https://rewards.bing.com/'),
-                    Origin: this.applyHostRules('https://rewards.bing.com')
-                }
+                headers
             }
 
             const response = await this.bot.axios.request(request)
@@ -274,15 +286,25 @@ export default class BrowserFunc {
 
             // Try using script from dashboard page
             try {
+                const baseUrlResult = this.applyHostRules(this.bot.config.baseURL)
+                const refererFallbackResult = this.applyHostRules('https://rewards.bing.com/')
+                const originFallbackResult = this.applyHostRules('https://rewards.bing.com')
+
+                const fallbackHeaders: any = {
+                    ...(this.bot.fingerprint?.headers ?? {}),
+                    Cookie: this.buildCookieHeader(this.bot.cookies.mobile),
+                    Referer: refererFallbackResult.url,
+                    Origin: originFallbackResult.url
+                }
+
+                if (baseUrlResult.originalHostname) {
+                    fallbackHeaders['Host'] = baseUrlResult.originalHostname
+                }
+
                 const request: AxiosRequestConfig = {
-                    url: this.applyHostRules(this.bot.config.baseURL),
+                    url: baseUrlResult.url,
                     method: 'GET',
-                    headers: {
-                        ...(this.bot.fingerprint?.headers ?? {}),
-                        Cookie: this.buildCookieHeader(this.bot.cookies.mobile),
-                        Referer: this.applyHostRules('https://rewards.bing.com/'),
-                        Origin: this.applyHostRules('https://rewards.bing.com')
-                    }
+                    headers: fallbackHeaders
                 }
 
                 const response = await this.bot.axios.request(request)
@@ -307,14 +329,22 @@ export default class BrowserFunc {
      */
     async getAppDashboardData(): Promise<AppDashboardData> {
         try {
+            const urlResult = this.applyHostRules('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAIOS&options=613')
+
+            const headers: any = {
+                Authorization: `Bearer ${this.bot.accessToken}`,
+                'User-Agent':
+                    'Bing/32.5.431027001 (com.microsoft.bing; build:431027001; iOS 17.6.1) Alamofire/5.10.2'
+            }
+
+            if (urlResult.originalHostname) {
+                headers['Host'] = urlResult.originalHostname
+            }
+
             const request: AxiosRequestConfig = {
-                url: this.applyHostRules('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAIOS&options=613'),
+                url: urlResult.url,
                 method: 'GET',
-                headers: {
-                    Authorization: `Bearer ${this.bot.accessToken}`,
-                    'User-Agent':
-                        'Bing/32.5.431027001 (com.microsoft.bing; build:431027001; iOS 17.6.1) Alamofire/5.10.2'
-                }
+                headers
             }
 
             const response = await this.bot.axios.request(request)
@@ -335,14 +365,22 @@ export default class BrowserFunc {
      */
     async getXBoxDashboardData(): Promise<XboxDashboardData> {
         try {
+            const urlResult = this.applyHostRules('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=xboxapp&options=6')
+
+            const headers: any = {
+                Authorization: `Bearer ${this.bot.accessToken}`,
+                'User-Agent':
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; Xbox; Xbox One X) AppleWebKit/537.36 (KHTML, like Gecko) Edge/18.19041'
+            }
+
+            if (urlResult.originalHostname) {
+                headers['Host'] = urlResult.originalHostname
+            }
+
             const request: AxiosRequestConfig = {
-                url: this.applyHostRules('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=xboxapp&options=6'),
+                url: urlResult.url,
                 method: 'GET',
-                headers: {
-                    Authorization: `Bearer ${this.bot.accessToken}`,
-                    'User-Agent':
-                        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; Xbox; Xbox One X) AppleWebKit/537.36 (KHTML, like Gecko) Edge/18.19041'
-                }
+                headers
             }
 
             const response = await this.bot.axios.request(request)
@@ -443,15 +481,23 @@ export default class BrowserFunc {
         try {
             const eligibleOffers = ['ENUS_readarticle3_30points', 'Gamification_Sapphire_DailyCheckIn']
 
+            const urlResult = this.applyHostRules('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAAndroid&options=613')
+
+            const headers: any = {
+                Authorization: `Bearer ${this.bot.accessToken}`,
+                'X-Rewards-Country': this.bot.userData.geoLocale,
+                'X-Rewards-Language': 'en',
+                'X-Rewards-ismobile': 'true'
+            }
+
+            if (urlResult.originalHostname) {
+                headers['Host'] = urlResult.originalHostname
+            }
+
             const request: AxiosRequestConfig = {
-                url: this.applyHostRules('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAAndroid&options=613'),
+                url: urlResult.url,
                 method: 'GET',
-                headers: {
-                    Authorization: `Bearer ${this.bot.accessToken}`,
-                    'X-Rewards-Country': this.bot.userData.geoLocale,
-                    'X-Rewards-Language': 'en',
-                    'X-Rewards-ismobile': 'true'
-                }
+                headers
             }
 
             const response = await this.bot.axios.request(request)
