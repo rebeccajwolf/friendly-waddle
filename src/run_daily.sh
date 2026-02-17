@@ -82,6 +82,8 @@ echo "Sleeping for $SLEEP_MINUTES minutes ($SLEEPTIME seconds)..."
 # Log the start of the script
 echo "Starting script..."
 
+cat src/accounts.json
+
 # Update config with environment variables before running the script
 # node src/updateConfig.js
 
