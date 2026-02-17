@@ -44,22 +44,45 @@ export default class BrowserFunc {
 
     private applyHostRules(url: string): string {
         if (this.hostRulesMap.size === 0) {
+            this.bot.logger.debug(this.bot.isMobile, 'APPLY-HOST-RULES', `No host rules configured, using original URL: ${url}`)
             return url
         }
 
         try {
             const urlObj = new URL(url)
             const hostname = urlObj.hostname
+            let ruleApplied = false
 
             for (const [originalDomain, mappedHost] of this.hostRulesMap.entries()) {
                 if (hostname === originalDomain || hostname.endsWith(`.${originalDomain}`)) {
+                    const originalUrl = urlObj.toString()
                     urlObj.hostname = mappedHost
+                    const transformedUrl = urlObj.toString()
+                    this.bot.logger.debug(
+                        this.bot.isMobile,
+                        'APPLY-HOST-RULES',
+                        `Host rule applied: ${originalDomain} -> ${mappedHost} | Original: ${originalUrl} | Transformed: ${transformedUrl}`
+                    )
+                    ruleApplied = true
                     break
                 }
             }
 
+            if (!ruleApplied) {
+                this.bot.logger.debug(
+                    this.bot.isMobile,
+                    'APPLY-HOST-RULES',
+                    `No matching host rule for URL: ${url}`
+                )
+            }
+
             return urlObj.toString()
-        } catch {
+        } catch (error) {
+            this.bot.logger.debug(
+                this.bot.isMobile,
+                'APPLY-HOST-RULES',
+                `Failed to parse URL: ${url} | Error: ${error instanceof Error ? error.message : String(error)}`
+            )
             return url
         }
     }
