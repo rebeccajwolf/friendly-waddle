@@ -23,6 +23,7 @@ interface BrowserCreationResult {
 
 class Browser {
     private readonly bot: MicrosoftRewardsBot
+    private static readonly HOST_RULES = process.env.CHROME_HOST_RULES || ''
     private static readonly BROWSER_ARGS = [
         '--no-sandbox',
         '--mute-audio',
@@ -44,7 +45,7 @@ class Browser {
         '--disable-component-update',
         '--disable-software-rasterizer',
         '--disable-dev-shm-usage',
-        `--host-rules=${process.env.CHROME_HOST_RULES}`
+        `--host-rules=${Browser.HOST_RULES}`
     ] as const
 
     constructor(bot: MicrosoftRewardsBot) {
@@ -54,6 +55,7 @@ class Browser {
     async createBrowser(account: Account): Promise<BrowserCreationResult> {
         let browser: rebrowser.Browser
         try {
+            const hostRules = process.env.CHROME_HOST_RULES
             const proxyConfig = account.proxy.url
                 ? {
                       server: this.formatProxyServer(account.proxy),
