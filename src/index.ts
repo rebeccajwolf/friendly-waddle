@@ -127,7 +127,7 @@ export class MicrosoftRewardsBot {
         return getCurrentContext().isMobile
     }
 
-    private replaceDiscordUrlHostname(url: string): string {
+    private replaceDiscordUrlHostname(url: string): { url: string; originalHostname?: string } {
         try {
             const urlObj = new URL(url)
             const hostname = urlObj.hostname
@@ -138,18 +138,18 @@ export class MicrosoftRewardsBot {
 
                 if (mappedIP) {
                     urlObj.hostname = mappedIP
-                    return urlObj.toString()
+                    return { url: urlObj.toString(), originalHostname: hostname }
                 }
             }
 
-            return url
+            return { url }
         } catch (error) {
             this.logger.error(
                 'main',
                 'DISCORD-URL-REPLACE',
                 `Failed to replace Discord URL hostname: ${error instanceof Error ? error.message : String(error)}`
             )
-            return url
+            return { url }
         }
     }
 
@@ -204,8 +204,8 @@ export class MicrosoftRewardsBot {
                     const content = log.content
                     const level = log.level
                     if (webhook.discord?.enabled && webhook.discord.url) {
-                        const modifiedUrl = this.replaceDiscordUrlHostname(webhook.discord.url)
-                        sendDiscord(modifiedUrl, content, level)
+                        const { url: modifiedUrl, originalHostname } = this.replaceDiscordUrlHostname(webhook.discord.url)
+                        sendDiscord(modifiedUrl, content, level, originalHostname)
                     }
                     if (webhook.ntfy?.enabled && webhook.ntfy.url) {
                         sendNtfy(webhook.ntfy, content, level)

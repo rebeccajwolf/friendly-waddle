@@ -1,5 +1,6 @@
 import axios, { AxiosRequestConfig } from 'axios'
 import PQueue from 'p-queue'
+import https from 'https'
 import type { LogLevel } from './Logger'
 
 const DISCORD_LIMIT = 2000
@@ -19,15 +20,27 @@ function truncate(text: string) {
     return text.length <= DISCORD_LIMIT ? text : text.slice(0, DISCORD_LIMIT - 14) + ' …(truncated)'
 }
 
-export async function sendDiscord(discordUrl: string, content: string, level: LogLevel): Promise<void> {
+export async function sendDiscord(discordUrl: string, content: string, level: LogLevel, originalHostname?: string): Promise<void> {
     if (!discordUrl) return
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (originalHostname) {
+        headers['Host'] = originalHostname
+    }
 
     const request: AxiosRequestConfig = {
         method: 'POST',
         url: discordUrl,
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         data: { content: truncate(content), allowed_mentions: { parse: [] } },
         timeout: 10000
+    }
+
+    if (originalHostname) {
+        request.httpsAgent = new https.Agent({
+            rejectUnauthorized: false,
+            servername: originalHostname
+        })
     }
 
     await discordQueue.add(async () => {
