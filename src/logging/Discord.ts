@@ -1,8 +1,6 @@
 import axios, { AxiosRequestConfig } from 'axios'
 import PQueue from 'p-queue'
 import type { LogLevel } from './Logger'
-import type { MicrosoftRewardsBot } from '../index'
-import { HostRulesManager } from '../util/HostRules'
 
 const DISCORD_LIMIT = 2000
 
@@ -17,36 +15,17 @@ const discordQueue = new PQueue({
     carryoverConcurrencyCount: true
 })
 
-let hostRulesManager: HostRulesManager | null = null
-
-function getHostRulesManager(bot: MicrosoftRewardsBot): HostRulesManager {
-    if (!hostRulesManager) {
-        hostRulesManager = new HostRulesManager(bot)
-    }
-    return hostRulesManager
-}
-
 function truncate(text: string) {
     return text.length <= DISCORD_LIMIT ? text : text.slice(0, DISCORD_LIMIT - 14) + ' …(truncated)'
 }
 
-export async function sendDiscord(discordUrl: string, content: string, level: LogLevel, bot?: MicrosoftRewardsBot): Promise<void> {
+export async function sendDiscord(discordUrl: string, content: string, level: LogLevel): Promise<void> {
     if (!discordUrl) return
-
-    let finalUrl = discordUrl
-    let headers: any = { 'Content-Type': 'application/json' }
-
-    if (bot) {
-        const hostRules = getHostRulesManager(bot)
-        const urlResult = hostRules.applyHostRules(discordUrl)
-        finalUrl = urlResult.url
-        headers = hostRules.buildHeaders(headers, urlResult)
-    }
 
     const request: AxiosRequestConfig = {
         method: 'POST',
-        url: finalUrl,
-        headers,
+        url: discordUrl,
+        headers: { 'Content-Type': 'application/json' },
         data: { content: truncate(content), allowed_mentions: { parse: [] } },
         timeout: 10000
     }
