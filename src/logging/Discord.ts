@@ -1,8 +1,5 @@
 import axios, { AxiosRequestConfig } from 'axios'
 import PQueue from 'p-queue'
-import { Agent as HttpAgent } from 'node:http'
-import { Agent as HttpsAgent } from 'node:https'
-import { lookup } from 'node:dns/promises'
 import type { LogLevel } from './Logger'
 import type { MicrosoftRewardsBot } from '../index'
 import { HostRulesManager } from '../util/HostRules'
@@ -38,8 +35,6 @@ export async function sendDiscord(discordUrl: string, content: string, level: Lo
 
     let finalUrl = discordUrl
     let headers: any = { 'Content-Type': 'application/json' }
-    let httpAgent: any = undefined
-    let httpsAgent: any = undefined
 
     if (bot) {
         const hostRules = getHostRulesManager(bot)
@@ -48,22 +43,7 @@ export async function sendDiscord(discordUrl: string, content: string, level: Lo
         headers = hostRules.buildHeaders(headers, urlResult)
 
         if (urlResult.originalHostname) {
-            const targetUrl = new URL(finalUrl)
-            const ipAddress = targetUrl.hostname
-
-            if (targetUrl.protocol === 'https:') {
-                httpsAgent = new HttpsAgent({
-                    lookup: async (hostname: string, opts: any, callback: any) => {
-                        callback(null, ipAddress, 4)
-                    }
-                })
-            } else {
-                httpAgent = new HttpAgent({
-                    lookup: async (hostname: string, opts: any, callback: any) => {
-                        callback(null, ipAddress, 4)
-                    }
-                })
-            }
+            bot.logger.debug('main', 'DISCORD-HOST-RULES', `Applied host rules | Original URL: ${discordUrl} | Modified URL: ${finalUrl} | Host header: ${urlResult.originalHostname}`)
         }
     }
 
@@ -73,8 +53,8 @@ export async function sendDiscord(discordUrl: string, content: string, level: Lo
         headers,
         data: { content: truncate(content), allowed_mentions: { parse: [] } },
         timeout: 10000,
-        httpAgent,
-        httpsAgent
+        maxRedirects: 0,
+        validateStatus: (status) => status >= 200 && status < 400
     }
 
     await discordQueue.add(async () => {
@@ -82,15 +62,7 @@ export async function sendDiscord(discordUrl: string, content: string, level: Lo
             await axios(request)
         } catch (err: any) {
             const status = err?.response?.status
-            if (status === 429) {
-                console.warn('[Discord] Rate limited (429)')
-                return
-            }
-            console.error('[Discord] Failed to send webhook:', {
-                status,
-                message: err?.message,
-                url: finalUrl.substring(0, 50) + '...'
-            })
+            if (status === 429) return
         }
     })
 }
