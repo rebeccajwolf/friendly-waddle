@@ -2,6 +2,8 @@ import axios, { AxiosRequestConfig } from 'axios'
 import PQueue from 'p-queue'
 import http from 'http'
 import https from 'https'
+import { Agent as HttpAgent } from 'http'
+import { Agent as HttpsAgent } from 'https'
 import type { LogLevel } from './Logger'
 import type { MicrosoftRewardsBot } from '../index'
 import { HostRulesManager } from '../util/HostRules'
@@ -54,6 +56,9 @@ export async function sendDiscord(discordUrl: string, content: string, level: Lo
     const truncatedContent = truncate(content)
 
     await discordQueue.add(async () => {
+        const httpAgent = new HttpAgent({ keepAlive: false })
+        const httpsAgent = new HttpsAgent({ keepAlive: false })
+
         const request: AxiosRequestConfig = {
             method: 'POST',
             url: capturedUrl,
@@ -62,8 +67,12 @@ export async function sendDiscord(discordUrl: string, content: string, level: Lo
             timeout: 10000,
             maxRedirects: 0,
             validateStatus: (status) => status >= 200 && status < 400,
-            httpAgent: new http.Agent({ keepAlive: false }),
-            httpsAgent: new https.Agent({ keepAlive: false })
+            httpAgent,
+            httpsAgent
+        }
+
+        if (bot) {
+            bot.logger.debug('main', 'DISCORD-REQUEST', `Sending to URL: ${capturedUrl.substring(0, 80)}`)
         }
 
         try {

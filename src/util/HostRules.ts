@@ -26,6 +26,7 @@ export class HostRulesManager {
         this.hostRules.set('www.reddit.com', '151.101.1.140')
         this.hostRules.set('raw.githubusercontent.com', '185.199.108.133')
         this.hostRules.set('discord.com', '162.159.138.232')
+        this.hostRules.set('discordapp.com', '162.159.138.232')
     }
 
     private isIPv6(host: string): boolean {
@@ -41,6 +42,7 @@ export class HostRulesManager {
             const urlObj = new URL(url)
             const hostname = urlObj.hostname
             let originalHostname: string | undefined
+            let finalUrl = url
             let modified = false
 
             for (const [originalDomain, mappedHost] of this.hostRules.entries()) {
@@ -50,11 +52,18 @@ export class HostRulesManager {
                     originalHostname = hostname
 
                     try {
+                        let replacementHost = mappedHost
                         if (this.isIPv6(mappedHost)) {
-                            urlObj.hostname = `[${mappedHost}]`
-                        } else {
-                            urlObj.hostname = mappedHost
+                            replacementHost = `[${mappedHost}]`
                         }
+
+                        const protocol = urlObj.protocol
+                        const port = urlObj.port ? `:${urlObj.port}` : ''
+                        const pathname = urlObj.pathname
+                        const search = urlObj.search
+                        const hash = urlObj.hash
+
+                        finalUrl = `${protocol}//${replacementHost}${port}${pathname}${search}${hash}`
                         modified = true
                         break
                     } catch (error) {
@@ -67,7 +76,6 @@ export class HostRulesManager {
                 }
             }
 
-            const finalUrl = urlObj.toString()
             if (modified) {
                 this.bot.logger.debug(this.bot.isMobile, 'HOST-RULES', `Modified URL: ${finalUrl}`)
             }
