@@ -4,9 +4,14 @@ import path from 'path'
 import type { GoogleSearch, GoogleTrendsResponse, RedditListing, WikipediaTopResponse } from '../interface/Search'
 import type { MicrosoftRewardsBot } from '../index'
 import { QueryEngine } from '../interface/Config'
+import { HostRulesManager } from '../util/HostRules'
 
 export class QueryCore {
-    constructor(private bot: MicrosoftRewardsBot) {}
+    private hostRules: HostRulesManager
+
+    constructor(private bot: MicrosoftRewardsBot) {
+        this.hostRules = new HostRulesManager(bot)
+    }
 
     async queryManager(
         options: {
@@ -201,12 +206,17 @@ export class QueryCore {
         const queryTerms: GoogleSearch[] = []
 
         try {
+            const urlResult = this.hostRules.applyHostRules('https://trends.google.com/_/TrendsUi/data/batchexecute')
+
             const request: AxiosRequestConfig = {
-                url: 'https://trends.google.com/_/TrendsUi/data/batchexecute',
+                url: urlResult.url,
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
-                },
+                headers: this.hostRules.buildHeaders(
+                    {
+                        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+                    },
+                    urlResult
+                ),
                 data: `f.req=[[[i0OFE,"[null, null, \\"${geoLocale.toUpperCase()}\\", 0, null, 48]"]]]`
             }
 
@@ -256,15 +266,20 @@ export class QueryCore {
 
     async getBingSuggestions(query = '', langCode = 'en'): Promise<string[]> {
         try {
+            const urlResult = this.hostRules.applyHostRules(
+                `https://www.bingapis.com/api/v7/suggestions?q=${encodeURIComponent(query)}&appid=6D0A9B8C5100E9ECC7E11A104ADD76C10219804B&cc=xl&setlang=${langCode}`
+            )
+
             const request: AxiosRequestConfig = {
-                url: `https://www.bingapis.com/api/v7/suggestions?q=${encodeURIComponent(
-                    query
-                )}&appid=6D0A9B8C5100E9ECC7E11A104ADD76C10219804B&cc=xl&setlang=${langCode}`,
+                url: urlResult.url,
                 method: 'POST',
-                headers: {
-                    ...(this.bot.fingerprint?.headers ?? {}),
-                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
-                }
+                headers: this.hostRules.buildHeaders(
+                    {
+                        ...(this.bot.fingerprint?.headers ?? {}),
+                        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+                    },
+                    urlResult
+                )
             }
 
             const response = await this.bot.axios.request(request, this.bot.config.proxy.queryEngine)
@@ -294,12 +309,17 @@ export class QueryCore {
 
     async getBingRelatedTerms(query: string): Promise<string[]> {
         try {
+            const urlResult = this.hostRules.applyHostRules(`https://api.bing.com/osjson.aspx?query=${encodeURIComponent(query)}`)
+
             const request: AxiosRequestConfig = {
-                url: `https://api.bing.com/osjson.aspx?query=${encodeURIComponent(query)}`,
+                url: urlResult.url,
                 method: 'GET',
-                headers: {
-                    ...(this.bot.fingerprint?.headers ?? {})
-                }
+                headers: this.hostRules.buildHeaders(
+                    {
+                        ...(this.bot.fingerprint?.headers ?? {})
+                    },
+                    urlResult
+                )
             }
 
             const response = await this.bot.axios.request(request, this.bot.config.proxy.queryEngine)
@@ -329,18 +349,25 @@ export class QueryCore {
 
     async getBingTrendingTopics(langCode = 'en'): Promise<string[]> {
         try {
+            const urlResult = this.hostRules.applyHostRules(
+                `https://www.bing.com/api/v7/news/trendingtopics?appid=91B36E34F9D1B900E54E85A77CF11FB3BE5279E6&cc=xl&setlang=${langCode}`
+            )
+
             const request: AxiosRequestConfig = {
-                url: `https://www.bing.com/api/v7/news/trendingtopics?appid=91B36E34F9D1B900E54E85A77CF11FB3BE5279E6&cc=xl&setlang=${langCode}`,
+                url: urlResult.url,
                 method: 'GET',
-                headers: {
-                    Authorization: `Bearer ${this.bot.accessToken}`,
-                    'User-Agent':
-                        'Bing/32.5.431027001 (com.microsoft.bing; build:431027001; iOS 17.6.1) Alamofire/5.10.2',
-                    'Content-Type': 'application/json',
-                    'X-Rewards-Country': this.bot.userData.geoLocale,
-                    'X-Rewards-Language': 'en',
-                    'X-Rewards-ismobile': 'true'
-                }
+                headers: this.hostRules.buildHeaders(
+                    {
+                        Authorization: `Bearer ${this.bot.accessToken}`,
+                        'User-Agent':
+                            'Bing/32.5.431027001 (com.microsoft.bing; build:431027001; iOS 17.6.1) Alamofire/5.10.2',
+                        'Content-Type': 'application/json',
+                        'X-Rewards-Country': this.bot.userData.geoLocale,
+                        'X-Rewards-Language': 'en',
+                        'X-Rewards-ismobile': 'true'
+                    },
+                    urlResult
+                )
             }
 
             const response = await this.bot.axios.request(request, this.bot.config.proxy.queryEngine)
@@ -377,12 +404,19 @@ export class QueryCore {
             const mm = String(date.getUTCMonth() + 1).padStart(2, '0')
             const dd = String(date.getUTCDate()).padStart(2, '0')
 
+            const urlResult = this.hostRules.applyHostRules(
+                `https://wikimedia.org/api/rest_v1/metrics/pageviews/top/${langCode}.wikipedia/all-access/${yyyy}/${mm}/${dd}`
+            )
+
             const request: AxiosRequestConfig = {
-                url: `https://wikimedia.org/api/rest_v1/metrics/pageviews/top/${langCode}.wikipedia/all-access/${yyyy}/${mm}/${dd}`,
+                url: urlResult.url,
                 method: 'GET',
-                headers: {
-                    ...(this.bot.fingerprint?.headers ?? {})
-                }
+                headers: this.hostRules.buildHeaders(
+                    {
+                        ...(this.bot.fingerprint?.headers ?? {})
+                    },
+                    urlResult
+                )
             }
 
             const response = await this.bot.axios.request(request, this.bot.config.proxy.queryEngine)
@@ -414,12 +448,17 @@ export class QueryCore {
     async getRedditTopics(subreddit = 'popular'): Promise<string[]> {
         try {
             const safe = subreddit.replace(/[^a-zA-Z0-9_+]/g, '')
+            const urlResult = this.hostRules.applyHostRules(`https://www.reddit.com/r/${safe}.json?limit=50`)
+
             const request: AxiosRequestConfig = {
-                url: `https://www.reddit.com/r/${safe}.json?limit=50`,
+                url: urlResult.url,
                 method: 'GET',
-                headers: {
-                    ...(this.bot.fingerprint?.headers ?? {})
-                }
+                headers: this.hostRules.buildHeaders(
+                    {
+                        ...(this.bot.fingerprint?.headers ?? {})
+                    },
+                    urlResult
+                )
             }
 
             const response = await this.bot.axios.request(request, this.bot.config.proxy.queryEngine)
