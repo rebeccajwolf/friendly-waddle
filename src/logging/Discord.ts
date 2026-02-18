@@ -36,27 +36,23 @@ function truncate(text: string) {
 export async function sendDiscord(discordUrl: string, content: string, level: LogLevel, bot?: MicrosoftRewardsBot): Promise<void> {
     if (!discordUrl) return
 
-    let finalUrl = discordUrl
-    let headers: any = { 'Content-Type': 'application/json' }
-
-    if (bot) {
-        const hostRules = getHostRulesManager(bot)
-        const urlResult = hostRules.applyHostRules(discordUrl)
-        finalUrl = urlResult.url
-        headers = hostRules.buildHeaders(headers, urlResult)
-
-        if (urlResult.originalHostname) {
-            bot.logger.debug('main', 'DISCORD-HOST-RULES', `Applied host rules | Original URL: ${discordUrl} | Modified URL: ${finalUrl} | Host header: ${urlResult.originalHostname}`)
-        }
-    }
-
-    const capturedUrl = finalUrl
-    const capturedHeaders = { ...headers }
     const truncatedContent = truncate(content)
+    let hostHeader: string | undefined
 
     await discordQueue.add(async () => {
+        let finalUrl = discordUrl
         const customLookup = (hostname: string, options: any, callback: any) => {
-            if (/^\d+\.\d+\.\d+\.\d+$/.test(hostname)) {
+            let mappedHost: string | undefined
+
+            if (bot) {
+                const hostRules = getHostRulesManager(bot)
+                mappedHost = hostRules.getHostMapping(hostname)
+            }
+
+            if (mappedHost) {
+                hostHeader = hostname
+                callback(null, mappedHost, mappedHost.includes(':') ? 6 : 4)
+            } else if (/^\d+\.\d+\.\d+\.\d+$/.test(hostname)) {
                 callback(null, hostname, 4)
             } else {
                 lookup(hostname, options, callback)
@@ -66,20 +62,21 @@ export async function sendDiscord(discordUrl: string, content: string, level: Lo
         const httpAgent = new HttpAgent({ keepAlive: false, lookup: customLookup })
         const httpsAgent = new HttpsAgent({ keepAlive: false, lookup: customLookup })
 
+        const headers: any = { 'Content-Type': 'application/json' }
+        if (hostHeader) {
+            headers['Host'] = hostHeader
+        }
+
         const request: AxiosRequestConfig = {
             method: 'POST',
-            url: capturedUrl,
-            headers: capturedHeaders,
+            url: finalUrl,
+            headers,
             data: { content: truncatedContent, allowed_mentions: { parse: [] } },
             timeout: 10000,
             maxRedirects: 0,
             validateStatus: (status) => status >= 200 && status < 400,
             httpAgent,
             httpsAgent
-        }
-
-        if (bot) {
-            bot.logger.debug('main', 'DISCORD-REQUEST', `Sending to URL: ${capturedUrl.substring(0, 80)}`)
         }
 
         try {
@@ -93,7 +90,7 @@ export async function sendDiscord(discordUrl: string, content: string, level: Lo
             console.error('[Discord] Failed to send webhook:', {
                 status,
                 message: err?.message,
-                url: capturedUrl.substring(0, 50) + '...'
+                url: finalUrl.substring(0, 50) + '...'
             })
         }
     })
