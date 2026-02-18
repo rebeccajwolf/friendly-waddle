@@ -2,9 +2,13 @@ import axios, { AxiosRequestConfig } from 'axios'
 import PQueue from 'p-queue'
 import { Agent as HttpAgent } from 'http'
 import { Agent as HttpsAgent } from 'https'
+import { lookup } from 'dns'
+import { promisify } from 'util'
 import type { LogLevel } from './Logger'
 import type { MicrosoftRewardsBot } from '../index'
 import { HostRulesManager } from '../util/HostRules'
+
+const dnsLookup = promisify(lookup)
 
 const DISCORD_LIMIT = 2000
 
@@ -54,8 +58,16 @@ export async function sendDiscord(discordUrl: string, content: string, level: Lo
     const truncatedContent = truncate(content)
 
     await discordQueue.add(async () => {
-        const httpAgent = new HttpAgent({ keepAlive: false })
-        const httpsAgent = new HttpsAgent({ keepAlive: false })
+        const customLookup = (hostname: string, options: any, callback: any) => {
+            if (/^\d+\.\d+\.\d+\.\d+$/.test(hostname)) {
+                callback(null, hostname, 4)
+            } else {
+                lookup(hostname, options, callback)
+            }
+        }
+
+        const httpAgent = new HttpAgent({ keepAlive: false, lookup: customLookup })
+        const httpsAgent = new HttpsAgent({ keepAlive: false, lookup: customLookup })
 
         const request: AxiosRequestConfig = {
             method: 'POST',
