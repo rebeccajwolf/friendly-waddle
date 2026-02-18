@@ -11,8 +11,8 @@ cat > /home/user/app/src/config.json <<EOF
     "baseURL": "https://rewards.bing.com",
     "sessionPath": "sessions",
     "headless": false,
-    "clusters": 2,
-    "errorDiagnostics": true,
+    "clusters": 1,
+    "errorDiagnostics": false,
     "workers": {
         "doDailySet": true,
         "doSpecialPromotions": true,
