@@ -70,7 +70,7 @@ cat > /home/user/app/src/config.json <<EOF
             "enabled": true,
             "mode": "whitelist",
             "levels": ["error"],
-            "keywords": ["starting account", "select number", "collected"],
+            "keywords": ["starting account", "select number", "collected", "completed"],
             "regexPatterns": []
         }
     }
