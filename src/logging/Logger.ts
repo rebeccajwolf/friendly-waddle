@@ -125,7 +125,7 @@ export class Logger {
         if (cluster.isPrimary) {
             if (config.webhook.discord?.enabled && config.webhook.discord.url) {
                 if (level === 'debug') return
-                sendDiscord(config.webhook.discord.url, cleanMsg, level, this.bot)
+                sendDiscord(config.webhook.discord.url, cleanMsg, level)
             }
 
             if (config.webhook.ntfy?.enabled && config.webhook.ntfy.url) {
