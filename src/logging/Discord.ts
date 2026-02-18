@@ -56,7 +56,15 @@ export async function sendDiscord(discordUrl: string, content: string, level: Lo
             await axios(request)
         } catch (err: any) {
             const status = err?.response?.status
-            if (status === 429) return
+            if (status === 429) {
+                console.warn('[Discord] Rate limited (429)')
+                return
+            }
+            console.error('[Discord] Failed to send webhook:', {
+                status,
+                message: err?.message,
+                url: finalUrl.substring(0, 50) + '...'
+            })
         }
     })
 }
