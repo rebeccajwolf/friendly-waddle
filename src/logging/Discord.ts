@@ -1,7 +1,5 @@
 import axios, { AxiosRequestConfig } from 'axios'
 import PQueue from 'p-queue'
-import http from 'http'
-import https from 'https'
 import { Agent as HttpAgent } from 'http'
 import { Agent as HttpsAgent } from 'https'
 import type { LogLevel } from './Logger'
