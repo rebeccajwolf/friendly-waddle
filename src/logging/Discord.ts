@@ -1,5 +1,8 @@
 import axios, { AxiosRequestConfig } from 'axios'
 import PQueue from 'p-queue'
+import { Agent as HttpAgent } from 'node:http'
+import { Agent as HttpsAgent } from 'node:https'
+import { lookup } from 'node:dns/promises'
 import type { LogLevel } from './Logger'
 import type { MicrosoftRewardsBot } from '../index'
 import { HostRulesManager } from '../util/HostRules'
@@ -35,12 +38,33 @@ export async function sendDiscord(discordUrl: string, content: string, level: Lo
 
     let finalUrl = discordUrl
     let headers: any = { 'Content-Type': 'application/json' }
+    let httpAgent: any = undefined
+    let httpsAgent: any = undefined
 
     if (bot) {
         const hostRules = getHostRulesManager(bot)
         const urlResult = hostRules.applyHostRules(discordUrl)
         finalUrl = urlResult.url
         headers = hostRules.buildHeaders(headers, urlResult)
+
+        if (urlResult.originalHostname) {
+            const targetUrl = new URL(finalUrl)
+            const ipAddress = targetUrl.hostname
+
+            if (targetUrl.protocol === 'https:') {
+                httpsAgent = new HttpsAgent({
+                    lookup: async (hostname: string, opts: any, callback: any) => {
+                        callback(null, ipAddress, 4)
+                    }
+                })
+            } else {
+                httpAgent = new HttpAgent({
+                    lookup: async (hostname: string, opts: any, callback: any) => {
+                        callback(null, ipAddress, 4)
+                    }
+                })
+            }
+        }
     }
 
     const request: AxiosRequestConfig = {
@@ -48,7 +72,9 @@ export async function sendDiscord(discordUrl: string, content: string, level: Lo
         url: finalUrl,
         headers,
         data: { content: truncate(content), allowed_mentions: { parse: [] } },
-        timeout: 10000
+        timeout: 10000,
+        httpAgent,
+        httpsAgent
     }
 
     await discordQueue.add(async () => {
