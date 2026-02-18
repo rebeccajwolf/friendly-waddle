@@ -1,5 +1,7 @@
 import axios, { AxiosRequestConfig } from 'axios'
 import PQueue from 'p-queue'
+import http from 'http'
+import https from 'https'
 import type { LogLevel } from './Logger'
 import type { MicrosoftRewardsBot } from '../index'
 import { HostRulesManager } from '../util/HostRules'
@@ -54,7 +56,9 @@ export async function sendDiscord(discordUrl: string, content: string, level: Lo
         data: { content: truncate(content), allowed_mentions: { parse: [] } },
         timeout: 10000,
         maxRedirects: 0,
-        validateStatus: (status) => status >= 200 && status < 400
+        validateStatus: (status) => status >= 200 && status < 400,
+        httpAgent: new http.Agent({ keepAlive: false }),
+        httpsAgent: new https.Agent({ keepAlive: false })
     }
 
     await discordQueue.add(async () => {
