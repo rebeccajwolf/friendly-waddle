@@ -145,7 +145,7 @@ export class MicrosoftRewardsBot {
             return url
         } catch (error) {
             this.logger.error(
-                this.isMobile,
+                'main',
                 'DISCORD-URL-REPLACE',
                 `Failed to replace Discord URL hostname: ${error instanceof Error ? error.message : String(error)}`
             )
