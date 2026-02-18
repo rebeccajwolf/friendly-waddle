@@ -1,6 +1,7 @@
 import type { AxiosRequestConfig } from 'axios'
 import type { FindClippyPromotion } from '../../../interface/DashboardData'
 import { Workers } from '../../Workers'
+import { HostRulesManager } from '../../util/HostRules'
 
 export class FindClippy extends Workers {
     private cookieHeader: string = ''
@@ -10,6 +11,10 @@ export class FindClippy extends Workers {
     private gainedPoints: number = 0
 
     private oldBalance: number = this.bot.userData.currentPoints
+
+    private get hostRules(): HostRulesManager {
+        return new HostRulesManager(this.bot)
+    }
 
     public async doFindClippy(promotion: FindClippyPromotion) {
         const offerId = promotion.offerId
@@ -64,15 +69,22 @@ export class FindClippy extends Workers {
                 `Prepared Find Clippy form data | offerId=${offerId} | hash=${promotion.hash} | timeZone=60 | activityAmount=1 | type=${activityType}`
             )
 
+            const urlResult = this.hostRules.applyHostRules('https://rewards.bing.com/api/reportactivity?X-Requested-With=XMLHttpRequest')
+            const refererResult = this.hostRules.applyHostRules('https://rewards.bing.com/')
+            const originResult = this.hostRules.applyHostRules('https://rewards.bing.com')
+
             const request: AxiosRequestConfig = {
-                url: 'https://rewards.bing.com/api/reportactivity?X-Requested-With=XMLHttpRequest',
+                url: urlResult.url,
                 method: 'POST',
-                headers: {
-                    ...(this.bot.fingerprint?.headers ?? {}),
-                    Cookie: this.cookieHeader,
-                    Referer: 'https://rewards.bing.com/',
-                    Origin: 'https://rewards.bing.com'
-                },
+                headers: this.hostRules.buildHeaders(
+                    {
+                        ...(this.bot.fingerprint?.headers ?? {}),
+                        Cookie: this.cookieHeader,
+                        Referer: refererResult.url,
+                        Origin: originResult.url
+                    },
+                    urlResult
+                ),
                 data: formData
             }
 

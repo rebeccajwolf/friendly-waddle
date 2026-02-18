@@ -1,6 +1,7 @@
 import type { AxiosRequestConfig } from 'axios'
 import type { BasePromotion } from '../../../interface/DashboardData'
 import { Workers } from '../../Workers'
+import { HostRulesManager } from '../../util/HostRules'
 
 export class Quiz extends Workers {
     private cookieHeader: string = ''
@@ -10,6 +11,10 @@ export class Quiz extends Workers {
     private gainedPoints: number = 0
 
     private oldBalance: number = this.bot.userData.currentPoints
+
+    private get hostRules(): HostRulesManager {
+        return new HostRulesManager(this.bot)
+    }
 
     async doQuiz(promotion: BasePromotion) {
         const offerId = promotion.offerId
@@ -75,14 +80,19 @@ export class Quiz extends Workers {
                             QuestionIndex: '-1'
                         }
 
+                        const urlResult = this.hostRules.applyHostRules('https://www.bing.com/bingqa/ReportActivity?ajaxreq=1')
+
                         const request: AxiosRequestConfig = {
-                            url: 'https://www.bing.com/bingqa/ReportActivity?ajaxreq=1',
+                            url: urlResult.url,
                             method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-                                cookie: this.cookieHeader,
-                                ...this.fingerprintHeader
-                            },
+                            headers: this.hostRules.buildHeaders(
+                                {
+                                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                                    cookie: this.cookieHeader,
+                                    ...this.fingerprintHeader
+                                },
+                                urlResult
+                            ),
                             data: JSON.stringify(jsonData)
                         }
 

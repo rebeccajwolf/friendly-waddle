@@ -1,11 +1,16 @@
 import type { AxiosRequestConfig } from 'axios'
 import { Workers } from '../../Workers'
 import { PromotionalItem } from '../../../interface/DashboardData'
+import { HostRulesManager } from '../../util/HostRules'
 
 export class DoubleSearchPoints extends Workers {
     private cookieHeader: string = ''
 
     private fingerprintHeader: { [x: string]: string } = {}
+
+    private get hostRules(): HostRulesManager {
+        return new HostRulesManager(this.bot)
+    }
 
     public async doDoubleSearchPoints(promotion: PromotionalItem) {
         const offerId = promotion.offerId
@@ -60,15 +65,22 @@ export class DoubleSearchPoints extends Workers {
                 `Prepared Double Search Points form data | offerId=${offerId} | hash=${promotion.hash} | timeZone=60 | activityAmount=1 | type=${activityType}`
             )
 
+            const urlResult = this.hostRules.applyHostRules('https://rewards.bing.com/api/reportactivity?X-Requested-With=XMLHttpRequest')
+            const refererResult = this.hostRules.applyHostRules('https://rewards.bing.com/')
+            const originResult = this.hostRules.applyHostRules('https://rewards.bing.com')
+
             const request: AxiosRequestConfig = {
-                url: 'https://rewards.bing.com/api/reportactivity?X-Requested-With=XMLHttpRequest',
+                url: urlResult.url,
                 method: 'POST',
-                headers: {
-                    ...(this.bot.fingerprint?.headers ?? {}),
-                    Cookie: this.cookieHeader,
-                    Referer: 'https://rewards.bing.com/',
-                    Origin: 'https://rewards.bing.com'
-                },
+                headers: this.hostRules.buildHeaders(
+                    {
+                        ...(this.bot.fingerprint?.headers ?? {}),
+                        Cookie: this.cookieHeader,
+                        Referer: refererResult.url,
+                        Origin: originResult.url
+                    },
+                    urlResult
+                ),
                 data: formData
             }
 
