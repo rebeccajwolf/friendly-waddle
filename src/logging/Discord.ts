@@ -49,19 +49,23 @@ export async function sendDiscord(discordUrl: string, content: string, level: Lo
         }
     }
 
-    const request: AxiosRequestConfig = {
-        method: 'POST',
-        url: finalUrl,
-        headers,
-        data: { content: truncate(content), allowed_mentions: { parse: [] } },
-        timeout: 10000,
-        maxRedirects: 0,
-        validateStatus: (status) => status >= 200 && status < 400,
-        httpAgent: new http.Agent({ keepAlive: false }),
-        httpsAgent: new https.Agent({ keepAlive: false })
-    }
+    const capturedUrl = finalUrl
+    const capturedHeaders = { ...headers }
+    const truncatedContent = truncate(content)
 
     await discordQueue.add(async () => {
+        const request: AxiosRequestConfig = {
+            method: 'POST',
+            url: capturedUrl,
+            headers: capturedHeaders,
+            data: { content: truncatedContent, allowed_mentions: { parse: [] } },
+            timeout: 10000,
+            maxRedirects: 0,
+            validateStatus: (status) => status >= 200 && status < 400,
+            httpAgent: new http.Agent({ keepAlive: false }),
+            httpsAgent: new https.Agent({ keepAlive: false })
+        }
+
         try {
             await axios(request)
         } catch (err: any) {
@@ -73,7 +77,7 @@ export async function sendDiscord(discordUrl: string, content: string, level: Lo
             console.error('[Discord] Failed to send webhook:', {
                 status,
                 message: err?.message,
-                url: finalUrl.substring(0, 50) + '...'
+                url: capturedUrl.substring(0, 50) + '...'
             })
         }
     })
