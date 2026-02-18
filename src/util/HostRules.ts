@@ -1,4 +1,4 @@
-import type { MicrosoftRewardsBot } from '../../index'
+import type { MicrosoftRewardsBot } from '../index'
 
 export interface HostRuleResult {
     url: string

@@ -1,7 +1,7 @@
 import type { AxiosRequestConfig } from 'axios'
 import type { FindClippyPromotion } from '../../../interface/DashboardData'
 import { Workers } from '../../Workers'
-import { HostRulesManager } from '../../util/HostRules'
+import { HostRulesManager } from '../../../util/HostRules'
 
 export class FindClippy extends Workers {
     private cookieHeader: string = ''

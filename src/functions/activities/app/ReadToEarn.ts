@@ -1,7 +1,7 @@
 import type { AxiosRequestConfig } from 'axios'
 import { randomBytes } from 'crypto'
 import { Workers } from '../../Workers'
-import { HostRulesManager } from '../../util/HostRules'
+import { HostRulesManager } from '../../../util/HostRules'
 
 export class ReadToEarn extends Workers {
     private get hostRules(): HostRulesManager {

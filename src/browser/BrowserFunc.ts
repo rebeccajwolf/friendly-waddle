@@ -3,7 +3,7 @@ import type { AxiosRequestConfig } from 'axios'
 
 import type { MicrosoftRewardsBot } from '../index'
 import { saveSessionData } from '../util/Load'
-import { HostRulesManager } from './util/HostRules'
+import { HostRulesManager } from '../util/HostRules'
 
 import type { Counters, DashboardData } from './../interface/DashboardData'
 import type { AppUserData } from '../interface/AppUserData'

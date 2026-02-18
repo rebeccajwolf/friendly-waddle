@@ -6,7 +6,7 @@ import path from 'path'
 
 import { Workers } from '../../Workers'
 import { QueryCore } from '../../QueryEngine'
-import { HostRulesManager } from '../../util/HostRules'
+import { HostRulesManager } from '../../../util/HostRules'
 
 import type { BasePromotion } from '../../../interface/DashboardData'
 

@@ -2,7 +2,7 @@ import type { AxiosRequestConfig } from 'axios'
 import { randomUUID } from 'crypto'
 import type { Promotion } from '../../../interface/AppDashBoardData'
 import { Workers } from '../../Workers'
-import { HostRulesManager } from '../../util/HostRules'
+import { HostRulesManager } from '../../../util/HostRules'
 
 export class AppReward extends Workers {
     private get hostRules(): HostRulesManager {

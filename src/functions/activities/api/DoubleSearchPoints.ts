@@ -1,7 +1,7 @@
 import type { AxiosRequestConfig } from 'axios'
 import { Workers } from '../../Workers'
 import { PromotionalItem } from '../../../interface/DashboardData'
-import { HostRulesManager } from '../../util/HostRules'
+import { HostRulesManager } from '../../../util/HostRules'
 
 export class DoubleSearchPoints extends Workers {
     private cookieHeader: string = ''
