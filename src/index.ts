@@ -25,6 +25,7 @@ import { sendDiscord, flushDiscordQueue } from './logging/Discord'
 import { sendNtfy, flushNtfyQueue } from './logging/Ntfy'
 import type { DashboardData } from './interface/DashboardData'
 import type { AppDashboardData } from './interface/AppDashBoardData'
+import { HostRulesManager } from './util/HostRules'
 
 interface ExecutionContext {
     isMobile: boolean
@@ -126,6 +127,32 @@ export class MicrosoftRewardsBot {
         return getCurrentContext().isMobile
     }
 
+    private replaceDiscordUrlHostname(url: string): string {
+        try {
+            const urlObj = new URL(url)
+            const hostname = urlObj.hostname
+
+            if (hostname === 'discord.com' || hostname.endsWith('.discord.com')) {
+                const hostRulesManager = new HostRulesManager(this)
+                const mappedIP = hostRulesManager.getHostMapping('discord.com')
+
+                if (mappedIP) {
+                    urlObj.hostname = mappedIP
+                    return urlObj.toString()
+                }
+            }
+
+            return url
+        } catch (error) {
+            this.logger.error(
+                this.isMobile,
+                'DISCORD-URL-REPLACE',
+                `Failed to replace Discord URL hostname: ${error instanceof Error ? error.message : String(error)}`
+            )
+            return url
+        }
+    }
+
     async initialize(): Promise<void> {
         this.accounts = loadAccounts()
     }
@@ -177,7 +204,8 @@ export class MicrosoftRewardsBot {
                     const content = log.content
                     const level = log.level
                     if (webhook.discord?.enabled && webhook.discord.url) {
-                        sendDiscord(webhook.discord.url, content, level)
+                        const modifiedUrl = this.replaceDiscordUrlHostname(webhook.discord.url)
+                        sendDiscord(modifiedUrl, content, level)
                     }
                     if (webhook.ntfy?.enabled && webhook.ntfy.url) {
                         sendNtfy(webhook.ntfy, content, level)
