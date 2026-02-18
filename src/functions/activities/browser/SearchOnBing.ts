@@ -6,6 +6,7 @@ import path from 'path'
 
 import { Workers } from '../../Workers'
 import { QueryCore } from '../../QueryEngine'
+import { HostRulesManager } from '../../util/HostRules'
 
 import type { BasePromotion } from '../../../interface/DashboardData'
 
@@ -21,6 +22,10 @@ export class SearchOnBing extends Workers {
     private success: boolean = false
 
     private oldBalance: number = this.bot.userData.currentPoints
+
+    private get hostRules(): HostRulesManager {
+        return new HostRulesManager(this.bot)
+    }
 
     public async doSearchOnBing(promotion: BasePromotion, page: Page) {
         const offerId = promotion.offerId
@@ -196,15 +201,22 @@ export class SearchOnBing extends Workers {
                 __RequestVerificationToken: this.bot.requestToken
             })
 
+            const urlResult = this.hostRules.applyHostRules('https://rewards.bing.com/api/reportactivity?X-Requested-With=XMLHttpRequest')
+            const refererResult = this.hostRules.applyHostRules('https://rewards.bing.com/')
+            const originResult = this.hostRules.applyHostRules('https://rewards.bing.com')
+
             const request: AxiosRequestConfig = {
-                url: 'https://rewards.bing.com/api/reportactivity?X-Requested-With=XMLHttpRequest',
+                url: urlResult.url,
                 method: 'POST',
-                headers: {
-                    ...(this.bot.fingerprint?.headers ?? {}),
-                    Cookie: this.cookieHeader,
-                    Referer: 'https://rewards.bing.com/',
-                    Origin: 'https://rewards.bing.com'
-                },
+                headers: this.hostRules.buildHeaders(
+                    {
+                        ...(this.bot.fingerprint?.headers ?? {}),
+                        Cookie: this.cookieHeader,
+                        Referer: refererResult.url,
+                        Origin: originResult.url
+                    },
+                    urlResult
+                ),
                 data: formData
             }
 
@@ -252,11 +264,18 @@ export class SearchOnBing extends Workers {
                     'Fetching queries config from remote repository'
                 )
 
-                // Fetch from the repo directly so the user doesn't need to redownload the script for the new activities
-                const response = await this.bot.axios.request({
+                const urlResult = this.hostRules.applyHostRules('https://raw.githubusercontent.com/TheNetsky/Microsoft-Rewards-Script/refs/heads/v3/src/functions/bing-search-activity-queries.json')
+
+                const request: AxiosRequestConfig = {
+                    url: urlResult.url,
                     method: 'GET',
-                    url: 'https://raw.githubusercontent.com/TheNetsky/Microsoft-Rewards-Script/refs/heads/v3/src/functions/bing-search-activity-queries.json'
-                })
+                    headers: this.hostRules.buildHeaders(
+                        {},
+                        urlResult
+                    )
+                }
+
+                const response = await this.bot.axios.request(request)
                 queries = response.data
 
                 this.bot.logger.debug(

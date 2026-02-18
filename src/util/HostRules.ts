@@ -25,6 +25,7 @@ export class HostRulesManager {
         this.domainIpMap.set('api.bing.com', '150.171.73.13')
         this.domainIpMap.set('wikimedia.org', '198.35.26.96')
         this.domainIpMap.set('www.reddit.com', '151.101.1.140')
+        this.domainIpMap.set('raw.githubusercontent.com', '185.199.108.133')
     }
 
     private isIPv4(host: string): boolean {
