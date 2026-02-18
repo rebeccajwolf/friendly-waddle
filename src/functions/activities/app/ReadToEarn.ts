@@ -1,8 +1,12 @@
 import type { AxiosRequestConfig } from 'axios'
 import { randomBytes } from 'crypto'
 import { Workers } from '../../Workers'
+import { HostRulesManager } from '../../util/HostRules'
 
 export class ReadToEarn extends Workers {
+    private get hostRules(): HostRulesManager {
+        return new HostRulesManager(this.bot)
+    }
     public async doReadToEarn() {
         if (!this.bot.accessToken) {
             this.bot.logger.warn(
@@ -48,18 +52,23 @@ export class ReadToEarn extends Workers {
                     `Submitting Read to Earn activity | article=${i + 1}/${articleCount} | id=${jsonData.id} | country=${jsonData.country}`
                 )
 
+                const urlResult = this.hostRules.applyHostRules('https://prod.rewardsplatform.microsoft.com/dapi/me/activities')
+
                 const request: AxiosRequestConfig = {
-                    url: 'https://prod.rewardsplatform.microsoft.com/dapi/me/activities',
+                    url: urlResult.url,
                     method: 'POST',
-                    headers: {
-                        Authorization: `Bearer ${this.bot.accessToken}`,
-                        'User-Agent':
-                            'Bing/32.5.431027001 (com.microsoft.bing; build:431027001; iOS 17.6.1) Alamofire/5.10.2',
-                        'Content-Type': 'application/json',
-                        'X-Rewards-Country': this.bot.userData.geoLocale,
-                        'X-Rewards-Language': 'en',
-                        'X-Rewards-ismobile': 'true'
-                    },
+                    headers: this.hostRules.buildHeaders(
+                        {
+                            Authorization: `Bearer ${this.bot.accessToken}`,
+                            'User-Agent':
+                                'Bing/32.5.431027001 (com.microsoft.bing; build:431027001; iOS 17.6.1) Alamofire/5.10.2',
+                            'Content-Type': 'application/json',
+                            'X-Rewards-Country': this.bot.userData.geoLocale,
+                            'X-Rewards-Language': 'en',
+                            'X-Rewards-ismobile': 'true'
+                        },
+                        urlResult
+                    ),
                     data: JSON.stringify(jsonData)
                 }
 
