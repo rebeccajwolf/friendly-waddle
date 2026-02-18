@@ -67,9 +67,9 @@ cat > /home/user/app/src/config.json <<EOF
             "priority": 3
         },
         "webhookLogFilter": {
-            "enabled": true,
+            "enabled": false,
             "mode": "whitelist",
-            "levels": ["error", "info"],
+            "levels": ["error"],
             "keywords": ["starting account", "select number", "collected"],
             "regexPatterns": []
         }
