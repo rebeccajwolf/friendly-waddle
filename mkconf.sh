@@ -11,8 +11,8 @@ cat > /home/user/app/src/config.json <<EOF
     "baseURL": "https://rewards.bing.com",
     "sessionPath": "sessions",
     "headless": false,
-    "clusters": 1,
-    "errorDiagnostics": false,
+    "clusters": 2,
+    "errorDiagnostics": true,
     "workers": {
         "doDailySet": true,
         "doSpecialPromotions": true,
@@ -67,10 +67,10 @@ cat > /home/user/app/src/config.json <<EOF
             "priority": 3
         },
         "webhookLogFilter": {
-            "enabled": false,
-            "mode": "whitelist",
-            "levels": ["error"],
-            "keywords": ["starting account", "select number", "collected"],
+            "enabled": true,
+            "mode": "blacklist",
+            "levels": [],
+            "keywords": [],
             "regexPatterns": []
         }
     }
