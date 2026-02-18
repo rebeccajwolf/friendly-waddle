@@ -3,12 +3,9 @@ import PQueue from 'p-queue'
 import { Agent as HttpAgent } from 'http'
 import { Agent as HttpsAgent } from 'https'
 import { lookup } from 'dns'
-import { promisify } from 'util'
 import type { LogLevel } from './Logger'
 import type { MicrosoftRewardsBot } from '../index'
 import { HostRulesManager } from '../util/HostRules'
-
-const dnsLookup = promisify(lookup)
 
 const DISCORD_LIMIT = 2000
 
