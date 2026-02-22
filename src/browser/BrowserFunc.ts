@@ -91,7 +91,7 @@ export default class BrowserFunc {
                 return JSON.parse(match[1]) as DashboardData
             } catch (fallbackError) {
                 // If both fail
-                this.bot.logger.error(this.bot.isMobile, 'GET-DASHBOARD-DATA', 'Failed to get dashboard data')
+                this.bot.logger.error(this.bot.isMobile, 'GET-DASHBOARD-DATA', '@everyone Failed to get dashboard data')
                 throw fallbackError
             }
         }
