@@ -1,7 +1,9 @@
 # Set PATH so cron jobs can find node/npm
-PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin:/home/user/.local/bin
 # Set timezone for cron jobs
-TZ=${TZ}
+TZ="America/New_York"
 
 # Run automation according to CRON_SCHEDULE; redirect both stdout & stderr to Docker logs
-${CRON_SCHEDULE} /bin/bash /usr/src/microsoft-rewards-script/scripts/docker/run_daily.sh >> /proc/1/fd/1 2>&1
+55 4,17 * * * bash /home/user/app/clean_mem.sh >/proc/1/fd/1 2>/proc/1/fd/2
+
+0 5,18 * * * TZ=America/New_York bash /home/user/app/src/run_daily.sh >/proc/1/fd/1 2>/proc/1/fd/2
