@@ -1,0 +1,10 @@
+output HEADLESS-1 resolution 1920x1080 position 0,0
+output * bg #000000 solid_color
+xwayland disable
+for_window [app_id=".*"] floating enable
+for_window [app_id=".*"] border normal
+for_window [app_id=".*"] resize set 100 ppt 100 ppt
+for_window [class="Google-chrome"] {
+    border normal
+    inhibit_idle focus
+}
