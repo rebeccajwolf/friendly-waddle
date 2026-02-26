@@ -1,0 +1,13 @@
+jobs:
+  - name: clean_memory
+    command: bash /home/user/app/clean_mem.sh
+    schedule: "55 4,17 * * *"
+    captureStdout: true
+    captureStderr: true
+
+  - name: run_daily
+    command: bash /home/user/app/src/run_daily.sh
+    schedule: "0 5,18 * * *"
+    timezone: America/New_York
+    captureStdout: true
+    captureStderr: true

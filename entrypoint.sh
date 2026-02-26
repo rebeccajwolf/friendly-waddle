@@ -9,4 +9,4 @@ cd /home/user/app
 sh -c "nohup gunicorn keep_alive:app --bind 0.0.0.0:7860 & \
     bash mkconf.sh && \
     if [ \"$RUN_ON_START\" = \"true\" ]; then bash src/run_daily.sh >/proc/1/fd/1 2>/proc/1/fd/2; fi & \
-    jobberd"
+    yacron -c /home/user/app/job.yaml"
