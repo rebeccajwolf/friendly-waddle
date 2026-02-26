@@ -2,15 +2,15 @@
 
 # Makes accounts.json
 
-cat > /home/user/app/src/accounts.json <<EOF
+cat > /home/user/app/dist/accounts.json <<EOF
 ${ACCOUNTS}
 EOF
 
-cat > /home/user/app/src/config.json <<EOF
+cat > /home/user/app/dist/config.json <<EOF
 {
     "baseURL": "https://rewards.bing.com",
     "sessionPath": "sessions",
-    "headless": false,
+    "headless": true,
     "clusters": 2,
     "errorDiagnostics": true,
     "workers": {
