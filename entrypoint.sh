@@ -151,4 +151,5 @@ exec "nohup gunicorn keep_alive:app --bind 0.0.0.0:7860 & \
     npm run pre-build && \
     npm run build && \
     if [ \"$RUN_ON_START\" = \"true\" ]; then bash src/run_daily.sh >/proc/1/fd/1 2>/proc/1/fd/2; fi & \
-    supercronic /home/user/app/src/crontemplate"
+    crontab /etc/cron.d/mr-cron & \
+    cron -f"
