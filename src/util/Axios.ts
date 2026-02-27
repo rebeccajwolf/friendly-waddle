@@ -14,49 +14,29 @@ class AxiosClient {
     constructor(account: AccountProxy) {
         this.account = account
 
-        // Create HTTPS agent that ignores certificate errors
-        const httpsAgent = new https.Agent({
-            rejectUnauthorized: false,  // CRITICAL: Ignore SSL certificate mismatches
-            keepAlive: true
-        });
-
         this.instance = axios.create({
             timeout: 30000,
-            httpsAgent: httpsAgent,
             transformRequest: [(data, headers) => {
-                // CRITICAL: Preserve Host header if it exists
                 if (headers && headers['Host']) {
-                    // Store it in a way that survives
                     headers['Host'] = headers['Host'];
                 }
                 return data;
             }]
         });
 
-        // Interceptor to ensure Host header is never dropped
+        // Interceptor to ensure Host header and SNI are set correctly
         this.instance.interceptors.request.use((config) => {
-            // If there's a Host header in the original request, make sure it's in the final config
             if (config.headers && config.headers['Host']) {
-                // Force it to stay
-                config.headers['Host'] = config.headers['Host'];
+                const hostHeader = config.headers['Host'] as string;
                 
                 // Log for debugging
-                console.log(`[Axios] Sending request to ${config.url} with Host: ${config.headers['Host']}`);
-            }
-            
-            // If using proxy, ensure Host header is preserved
-            if (this.account.url && this.account.proxyAxios) {
-                // Some proxies strip headers, so we need to be extra careful
-                if (config.headers && config.headers['Host']) {
-                    // Store in a custom header that proxies won't touch
-                    config.headers['X-Original-Host'] = config.headers['Host'];
-                }
-            }
-
-            // Ensure httpsAgent has rejectUnauthorized: false
-            if (!config.httpsAgent) {
+                console.log(`[Axios] Sending request to ${config.url} with Host: ${hostHeader}`);
+                
+                // CRITICAL: Create HTTPS agent with proper SNI
                 config.httpsAgent = new https.Agent({
-                    rejectUnauthorized: false
+                    rejectUnauthorized: false,
+                    servername: hostHeader,  // Set SNI to match Host header
+                    keepAlive: true
                 });
             }
             
@@ -66,7 +46,6 @@ class AxiosClient {
         if (this.account.url && this.account.proxyAxios) {
             const agent = this.getAgentForProxy(this.account)
             this.instance.defaults.httpsAgent = agent
-            // Don't set httpAgent for HTTPS requests
         }
 
         axiosRetry(this.instance, {
@@ -76,7 +55,6 @@ class AxiosClient {
             },
             shouldResetTimeout: true,
             retryCondition: (error) => {
-                // Retry on timeouts and network errors
                 if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
                     console.log(`[Axios] Timeout detected, retrying...`);
                     return true;
@@ -132,45 +110,27 @@ class AxiosClient {
     }
 
     public async request(config: AxiosRequestConfig, bypassProxy = false): Promise<AxiosResponse> {
-        // Make a copy of headers to prevent modification
         const headers: Record<string, string> = { ...(config.headers as Record<string, string> || {}) };
         const hostHeader = headers['Host'];
         
-        // Create a new config with preserved headers
         const finalConfig: AxiosRequestConfig = {
             ...config,
             headers: headers as AxiosRequestHeaders
         };
 
-        // Ensure httpsAgent ignores certificate errors
-        if (!finalConfig.httpsAgent) {
+        // Set HTTPS agent with proper SNI
+        if (hostHeader) {
             finalConfig.httpsAgent = new https.Agent({
-                rejectUnauthorized: false
+                rejectUnauthorized: false,
+                servername: hostHeader,  // CRITICAL: Set SNI to match Host header
+                keepAlive: true
             });
-        }
-
-        // CRITICAL: If using proxy, we need to be extra careful with headers
-        if (this.account.url && this.account.proxyAxios && !bypassProxy) {
-            // Some proxies require the Host header to be the original domain
-            if (hostHeader) {
-                finalConfig.headers = finalConfig.headers || {} as AxiosRequestHeaders;
-                (finalConfig.headers as Record<string, string>)['Host'] = hostHeader;
-            }
         }
 
         try {
             if (bypassProxy) {
                 const bypassInstance = axios.create({
-                    timeout: 30000,
-                    httpsAgent: new https.Agent({
-                        rejectUnauthorized: false
-                    }),
-                    transformRequest: [(data, headers) => {
-                        if (headers && hostHeader) {
-                            (headers as Record<string, string>)['Host'] = hostHeader;
-                        }
-                        return data;
-                    }]
+                    timeout: 30000
                 });
                 
                 axiosRetry(bypassInstance, {
@@ -183,7 +143,6 @@ class AxiosClient {
 
             return await this.instance.request(finalConfig);
         } catch (error: any) {
-            // Log but don't modify error
             console.error(`[Axios] Request failed: ${error.message}`);
             throw error;
         }
