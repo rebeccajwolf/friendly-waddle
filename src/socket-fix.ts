@@ -16,8 +16,8 @@ const HARDCODED_IPS: Record<string, string[]> = {
     'discord.com': ['162.159.135.232', '162.159.133.232', '162.159.138.232'],
     'gateway.discord.gg': ['162.159.135.232', '162.159.133.232'],
     'cdn.discordapp.com': ['162.159.135.232'],
-    'rewards.bing.com': ['150.171.27.10'],
-    'www.bing.com': ['150.171.27.10'],
+    'rewards.bing.com': ['150.171.30.10'],
+    'www.bing.com': ['150.171.30.10'],
     'prod.rewardsplatform.microsoft.com': ['52.190.158.80']
 };
 
