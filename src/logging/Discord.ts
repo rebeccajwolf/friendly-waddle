@@ -17,18 +17,9 @@ export async function sendDiscord(discordUrl: string, content: string, level: Lo
     const match = discordUrl.match(/\/webhooks\/(\d+)\/([^\/]+)/);
     if (!match) return;
 
-    // If originalHostname is discord.com, use discordapp.com endpoint
-    // Otherwise keep original URL (for other services like ntfy)
-    let webhookUrl = discordUrl;
-    let httpsAgent = undefined;
-
-    if (originalHostname === 'discord.com') {
-        webhookUrl = `https://discordapp.com/api/webhooks/${match[1]}/${match[2]}`;
-        httpsAgent = new https.Agent({
-            rejectUnauthorized: false,
-            servername: 'discordapp.com'
-        });
-    }
+    // CRITICAL: Use discordapp.com for ALL Discord webhooks
+    // This is the key from the working Python solution
+    const webhookUrl = `https://discordapp.com/api/webhooks/${match[1]}/${match[2]}`;
 
     await discordQueue.add(async () => {
         try {
@@ -37,8 +28,12 @@ export async function sendDiscord(discordUrl: string, content: string, level: Lo
                 allowed_mentions: { parse: [] }
             }, {
                 timeout: 15000,
-                httpsAgent: httpsAgent
+                // Use standard HTTPS agent - no special config
+                httpsAgent: new https.Agent({
+                    rejectUnauthorized: false
+                })
             });
+            console.log('[Discord] ✅ Sent successfully');
         } catch (err: any) {
             if (err?.response?.status !== 429) {
                 console.error('[Discord] Failed:', err.message);
