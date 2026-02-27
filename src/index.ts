@@ -2,18 +2,17 @@
 // This MUST be the first code executed
 import dns from 'dns';
 import https from 'https';
-import type { LookupAddress } from 'dns';
 
 // Force Google DNS
 dns.setServers(['8.8.8.8', '8.8.4.4']);
 dns.setDefaultResultOrder('ipv4first');
 
-// Store original lookup
+// Create a wrapper function that preserves all properties
 const originalLookup = dns.lookup;
 
-// Simple, working patch that preserves all type information
-const patchedLookup: typeof dns.lookup = function(hostname, options, callback) {
-    // Handle the callback-only case (no options)
+// Cast to any to bypass TypeScript's strict checking
+(dns as any).lookup = function(hostname: string, options: any, callback?: any) {
+    // Handle different argument patterns
     if (typeof options === 'function') {
         const cb = options;
         if (hostname && (hostname.includes('discord.com') || hostname.includes('discord.media'))) {
@@ -24,12 +23,11 @@ const patchedLookup: typeof dns.lookup = function(hostname, options, callback) {
                 }
                 cb(null, addresses[0], 4);
             });
-            return {} as any;
+            return;
         }
         return originalLookup(hostname, cb);
     }
 
-    // Handle case with options and callback
     if (typeof callback === 'function') {
         if (hostname && (hostname.includes('discord.com') || hostname.includes('discord.media'))) {
             dns.resolve4(hostname, (err, addresses) => {
@@ -38,25 +36,22 @@ const patchedLookup: typeof dns.lookup = function(hostname, options, callback) {
                     return;
                 }
 
-                // Handle options.all = true case
-                if (options && (options as any).all === true) {
-                    const results: LookupAddress[] = [{ address: addresses[0], family: 4 }];
-                    (callback as any)(null, results);
+                if (options && options.all) {
+                    callback(null, [{ address: addresses[0], family: 4 }]);
                 } else {
-                    (callback as any)(null, addresses[0], 4);
+                    callback(null, addresses[0], 4);
                 }
             });
-            return {} as any;
+            return;
         }
         return originalLookup(hostname, options, callback);
     }
 
-    // Fallback
-    return originalLookup(hostname, options as any, callback as any);
+    return originalLookup(hostname, options, callback);
 };
 
-// Apply the patch
-dns.lookup = patchedLookup;
+// Copy over the promisify property
+(dns as any).lookup.__promisify__ = originalLookup.__promisify__;
 
 // Test connections at startup
 setTimeout(() => {
