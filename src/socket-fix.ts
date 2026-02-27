@@ -1,82 +1,75 @@
-// ===== SOCKET LEVEL DNS FIX - MUST BE FIRST =====
-// This patches the lowest level of Node.js networking
+// ===== FINAL DNS FIX - MUST BE FIRST =====
+// This combines all working approaches from HF users
 import dns from 'dns';
 import net from 'net';
 import { Resolver } from 'dns/promises';
 
-// Force Google DNS for all resolutions
+// ===== LAYER 1: Force IPv4 preference at Node.js level =====
+dns.setDefaultResultOrder('ipv4first');
+
+// ===== LAYER 2: Override DNS servers =====
+dns.setServers(['8.8.8.8', '8.8.4.4']);
+
+// ===== LAYER 3: Custom resolver with Google DNS =====
 const googleResolver = new Resolver();
 googleResolver.setServers(['8.8.8.8', '8.8.4.4']);
+
+// ===== LAYER 4: Hardcoded IP mappings (like the Persian solution) =====
+const IP_MAP: Record<string, string[]> = {
+    'rewards.bing.com': ['150.171.30.10', '150.171.29.10'],
+    'www.bing.com': ['2.18.67.162', '2.18.67.135'],
+    'prod.rewardsplatform.microsoft.com': ['13.107.213.40', '13.107.246.40'],
+    'discord.com': ['162.159.135.232', '162.159.128.233'],
+    'gateway.discord.gg': ['162.159.136.234', '162.159.134.234'],
+    'api.telegram.org': ['149.154.167.220', '91.108.56.110']
+};
 
 // Cache for resolved IPs
 const ipCache: Map<string, string[]> = new Map();
 
-// Hardcoded IPs for problematic domains (like the Python examples)
-const HARDCODED_IPS: Record<string, string[]> = {
-    'discord.com': ['162.159.135.232', '162.159.133.232', '162.159.138.232'],
-    'gateway.discord.gg': ['162.159.135.232', '162.159.133.232'],
-    'cdn.discordapp.com': ['162.159.135.232'],
-    'rewards.bing.com': ['150.171.27.10'],
-    'www.bing.com': ['150.171.27.10'],
-    'prod.rewardsplatform.microsoft.com': ['52.190.158.80']
-};
-
-// Pre-resolve common domains
-async function preResolveHosts() {
-    console.log('[SOCKET-FIX] Pre-resolving common hosts...');
-    const domains = Object.keys(HARDCODED_IPS);
+// Pre-resolve all domains
+async function preResolveAll() {
+    console.log('[DNS-FINAL] Pre-resolving all domains...');
     
-    for (const domain of domains) {
+    for (const [domain, hardcodedIPs] of Object.entries(IP_MAP)) {
         try {
             // Try Google DNS first
             const addresses = await googleResolver.resolve4(domain);
             ipCache.set(domain, addresses);
-            console.log(`[SOCKET-FIX] ✅ ${domain} -> ${addresses.join(', ')}`);
+            console.log(`[DNS-FINAL] ✅ ${domain} -> ${addresses.join(', ')}`);
         } catch (err) {
             // Fall back to hardcoded IPs
-            if (HARDCODED_IPS[domain]) {
-                ipCache.set(domain, HARDCODED_IPS[domain]);
-                console.log(`[SOCKET-FIX] ⚠️ ${domain} using hardcoded IPs: ${HARDCODED_IPS[domain].join(', ')}`);
-            }
+            ipCache.set(domain, hardcodedIPs);
+            console.log(`[DNS-FINAL] ⚠️ ${domain} using fallback: ${hardcodedIPs.join(', ')}`);
         }
     }
 }
 
-// ===== CRITICAL PART: Patch socket.getaddrinfo equivalent =====
-// In Node.js, we need to patch net.Socket.connect and dns.lookup
+// ===== LAYER 5: Patch socket.getaddrinfo (LOWEST LEVEL) =====
+const originalGetaddrinfo = (dns as any).lookup; // Store original
 
-// 1. Store original methods
-const originalConnect = net.Socket.prototype.connect;
-const originalLookup = dns.lookup;
-
-// 2. Helper to get IP for host - FIX: Return type is string | null with proper undefined checks
-function getIPForHost(host: string): string | null {
+// Helper to get IP (returns only IPv4)
+function getIPv4ForHost(host: string): string | null {
     // Check cache first
     for (const [domain, ips] of ipCache.entries()) {
         if (host === domain || host.endsWith(`.${domain}`)) {
-            const ip = ips[0];
-            // FIX: Check if ip is not undefined
-            if (ip !== undefined) {
-                return ip;
-            }
+            return ips[0]; // Return first IPv4
         }
     }
     
-    // Check hardcoded IPs as fallback
-    for (const [domain, ips] of Object.entries(HARDCODED_IPS)) {
+    // Check hardcoded map
+    for (const [domain, ips] of Object.entries(IP_MAP)) {
         if (host === domain || host.endsWith(`.${domain}`)) {
-            const ip = ips[0];
-            // FIX: Check if ip is not undefined
-            if (ip !== undefined) {
-                return ip;
-            }
+            return ips[0];
         }
     }
     
-    return null; // Return null if no IP found
+    return null;
 }
 
-// 3. Patch net.Socket.connect (LOWEST LEVEL)
+// ===== LAYER 6: Patch net.Socket.connect (like Python's socket patch) =====
+const originalConnect = net.Socket.prototype.connect;
+
 net.Socket.prototype.connect = function(this: any, ...args: any[]) {
     const options = args[0];
     
@@ -84,16 +77,21 @@ net.Socket.prototype.connect = function(this: any, ...args: any[]) {
         const host = options.host || options.servername;
         
         if (host && typeof host === 'string') {
-            const ip = getIPForHost(host);
-            if (ip !== null) { // Check for null
-                console.log(`[SOCKET-FIX] 🔄 Rewriting connection: ${host} -> ${ip}`);
+            const ip = getIPv4ForHost(host);
+            if (ip) {
+                console.log(`[DNS-FINAL] 🔄 ${host} -> ${ip}`);
                 
-                // Store original host for TLS SNI
+                // Store original for TLS SNI
                 this._originalServername = host;
                 
                 // Replace host with IP
                 if (options.host) options.host = ip;
-                if (options.servername) options.servername = host; // Keep original for SNI
+                if (options.servername) options.servername = host;
+                
+                // Force IPv4
+                if (options.family === undefined) {
+                    options.family = 4;
+                }
             }
         }
     }
@@ -101,22 +99,23 @@ net.Socket.prototype.connect = function(this: any, ...args: any[]) {
     return originalConnect.apply(this, args as any);
 };
 
-// 4. Patch dns.lookup as fallback
+// ===== LAYER 7: Patch dns.lookup to force IPv4 only =====
 (dns as any).lookup = function(hostname: string, options: any, callback?: any) {
-    const ip = getIPForHost(hostname);
+    // Force IPv4
+    const opts = typeof options === 'object' ? { ...options, family: 4 } : { family: 4 };
     
-    if (ip !== null) { // Check for null
-        console.log(`[SOCKET-FIX] DNS lookup: ${hostname} -> ${ip}`);
+    const ip = getIPv4ForHost(hostname);
+    
+    if (ip) {
+        console.log(`[DNS-FINAL] DNS: ${hostname} -> ${ip}`);
         
-        // Handle callback-only case
         if (typeof options === 'function') {
             options(null, ip, 4);
             return;
         }
         
-        // Handle options+callback case
         if (typeof callback === 'function') {
-            if (options && options.all) {
+            if (opts.all) {
                 callback(null, [{ address: ip, family: 4 }]);
             } else {
                 callback(null, ip, 4);
@@ -125,16 +124,42 @@ net.Socket.prototype.connect = function(this: any, ...args: any[]) {
         }
     }
     
-    return originalLookup(hostname, options, callback);
+    // Fall back to original with forced IPv4
+    if (typeof options === 'function') {
+        return originalGetaddrinfo(hostname, opts, options);
+    }
+    if (typeof callback === 'function') {
+        return originalGetaddrinfo(hostname, opts, callback);
+    }
+    return originalGetaddrinfo(hostname, opts);
 };
 
-// 5. Copy promisify property
-(dns as any).lookup.__promisify__ = originalLookup.__promisify__;
+// Copy promisify
+(dns as any).lookup.__promisify__ = originalGetaddrinfo.__promisify__;
 
-// Run pre-resolution
-preResolveHosts().then(() => {
-    console.log('[SOCKET-FIX] ✅ Ready - All connections will be intercepted');
+// ===== LAYER 8: Patch dns.resolve4 to use our cache =====
+const originalResolve4 = dns.resolve4;
+(dns as any).resolve4 = function(hostname: string, options: any, callback?: any) {
+    const ip = getIPv4ForHost(hostname);
+    
+    if (ip) {
+        if (typeof options === 'function') {
+            options(null, [ip]);
+            return;
+        }
+        if (typeof callback === 'function') {
+            callback(null, [ip]);
+            return;
+        }
+    }
+    
+    return originalResolve4(hostname, options, callback);
+};
+
+// Start pre-resolution
+preResolveAll().then(() => {
+    console.log('[DNS-FINAL] ✅ Ready - All connections forced to IPv4 with correct IPs');
 });
 
-// Export for use
+// Export
 export { ipCache };
