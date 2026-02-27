@@ -1,21 +1,5 @@
 #!/bin/bash
 
-set -e
-
-echo "=== Startup Debug Info ==="
-echo "Current user: $(whoami)"
-echo "Current UID: $(id -u)"
-echo "App directory ownership:"
-ls -la /home/user/app/
-echo "Can we write to temp? $(touch /home/user/app/test && echo 'Yes' || echo 'No')"
-rm -f /home/user/app/test
-
-# Test Microsoft IP directly
-curl -I https://150.171.27.10 --connect-timeout 10
-
-# Test another known-good IP
-curl -I https://8.8.8.8 --connect-timeout 10
-
 export CHROME_HOST_RULES="MAP rewards.bing.com 150.171.28.10,MAP www.bing.com 150.171.28.10,MAP account.microsoft.com 150.171.28.10,MAP prod.rewardsplatform.microsoft.com 52.190.158.80"
 
 
