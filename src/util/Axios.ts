@@ -1,4 +1,4 @@
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios'
+import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, AxiosRequestHeaders } from 'axios'
 import axiosRetry from 'axios-retry'
 import { HttpProxyAgent } from 'http-proxy-agent'
 import { HttpsProxyAgent } from 'https-proxy-agent'
@@ -118,21 +118,21 @@ class AxiosClient {
 
     public async request(config: AxiosRequestConfig, bypassProxy = false): Promise<AxiosResponse> {
         // Make a copy of headers to prevent modification
-        const headers = { ...config.headers };
+        const headers: Record<string, string> = { ...(config.headers as Record<string, string> || {}) };
         const hostHeader = headers['Host'];
         
         // Create a new config with preserved headers
         const finalConfig: AxiosRequestConfig = {
             ...config,
-            headers: headers
+            headers: headers as AxiosRequestHeaders
         };
 
         // CRITICAL: If using proxy, we need to be extra careful with headers
         if (this.account.url && this.account.proxyAxios && !bypassProxy) {
             // Some proxies require the Host header to be the original domain
             if (hostHeader) {
-                finalConfig.headers = finalConfig.headers || {};
-                finalConfig.headers['Host'] = hostHeader;
+                finalConfig.headers = finalConfig.headers || {} as AxiosRequestHeaders;
+                (finalConfig.headers as Record<string, string>)['Host'] = hostHeader;
             }
         }
 
@@ -142,7 +142,7 @@ class AxiosClient {
                     timeout: 30000,
                     transformRequest: [(data, headers) => {
                         if (headers && hostHeader) {
-                            headers['Host'] = hostHeader;
+                            (headers as Record<string, string>)['Host'] = hostHeader;
                         }
                         return data;
                     }]
