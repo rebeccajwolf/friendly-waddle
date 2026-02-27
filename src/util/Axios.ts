@@ -16,30 +16,18 @@ class AxiosClient {
 
         this.instance = axios.create({
             timeout: 30000,
-            transformRequest: [(data, headers) => {
-                if (headers && headers['Host']) {
-                    headers['Host'] = headers['Host'];
-                }
-                return data;
-            }]
+            httpsAgent: new https.Agent({
+                rejectUnauthorized: false,
+                keepAlive: true
+            })
         });
 
-        // Interceptor to ensure Host header and SNI are set correctly
+        // Interceptor to ensure Host header and logging
         this.instance.interceptors.request.use((config) => {
             if (config.headers && config.headers['Host']) {
                 const hostHeader = config.headers['Host'] as string;
-                
-                // Log for debugging
-                console.log(`[Axios] Sending request to ${config.url} with Host: ${hostHeader}`);
-                
-                // CRITICAL: Create HTTPS agent with proper SNI
-                config.httpsAgent = new https.Agent({
-                    rejectUnauthorized: false,
-                    servername: hostHeader,  // Set SNI to match Host header
-                    keepAlive: true
-                });
+                console.log(`[Axios] Request to ${config.url} with Host: ${hostHeader}`);
             }
-            
             return config;
         });
 
@@ -49,10 +37,8 @@ class AxiosClient {
         }
 
         axiosRetry(this.instance, {
-            retries: 8,
-            retryDelay: (retryCount) => {
-                return Math.min(1000 * Math.pow(2, retryCount - 1), 30000);
-            },
+            retries: 5,
+            retryDelay: axiosRetry.exponentialDelay,
             shouldResetTimeout: true,
             retryCondition: (error) => {
                 if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
@@ -61,7 +47,6 @@ class AxiosClient {
                 }
                 if (axiosRetry.isNetworkError(error)) return true;
                 if (!error.response) return true;
-
                 const status = error.response.status;
                 return status === 429 || (status >= 500 && status <= 599);
             }
@@ -110,38 +95,15 @@ class AxiosClient {
     }
 
     public async request(config: AxiosRequestConfig, bypassProxy = false): Promise<AxiosResponse> {
-        const headers: Record<string, string> = { ...(config.headers as Record<string, string> || {}) };
-        const hostHeader = headers['Host'];
-        
-        const finalConfig: AxiosRequestConfig = {
-            ...config,
-            headers: headers as AxiosRequestHeaders
-        };
-
-        // Set HTTPS agent with proper SNI
-        if (hostHeader) {
-            finalConfig.httpsAgent = new https.Agent({
-                rejectUnauthorized: false,
-                servername: hostHeader,  // CRITICAL: Set SNI to match Host header
-                keepAlive: true
-            });
-        }
-
         try {
             if (bypassProxy) {
                 const bypassInstance = axios.create({
-                    timeout: 30000
+                    timeout: 30000,
+                    httpsAgent: new https.Agent({ rejectUnauthorized: false })
                 });
-                
-                axiosRetry(bypassInstance, {
-                    retries: 5,
-                    retryDelay: axiosRetry.exponentialDelay
-                });
-                
-                return await bypassInstance.request(finalConfig);
+                return await bypassInstance.request(config);
             }
-
-            return await this.instance.request(finalConfig);
+            return await this.instance.request(config);
         } catch (error: any) {
             console.error(`[Axios] Request failed: ${error.message}`);
             throw error;
