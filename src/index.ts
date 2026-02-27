@@ -2,6 +2,7 @@
 // This MUST be the first code executed
 import dns from 'dns';
 import https from 'https';
+import type { LookupAddress } from 'dns';
 
 // Force Google DNS
 dns.setServers(['8.8.8.8', '8.8.4.4']);
@@ -10,43 +11,44 @@ dns.setDefaultResultOrder('ipv4first');
 // Store original lookup
 const originalLookup = dns.lookup;
 
-// Properly typed monkey-patch
-const patchedLookup: typeof dns.lookup = (hostname, options, callback) => {
-    // Handle different overloads
+// Simple, working patch that preserves all type information
+const patchedLookup: typeof dns.lookup = function(hostname, options, callback) {
+    // Handle the callback-only case (no options)
     if (typeof options === 'function') {
-        // dns.lookup(hostname, callback)
         const cb = options;
         if (hostname && (hostname.includes('discord.com') || hostname.includes('discord.media'))) {
             dns.resolve4(hostname, (err, addresses) => {
                 if (err || !addresses || addresses.length === 0) {
-                    return originalLookup(hostname, cb);
+                    originalLookup(hostname, cb);
+                    return;
                 }
                 cb(null, addresses[0], 4);
             });
-        } else {
-            originalLookup(hostname, cb);
+            return {} as any;
         }
-        return;
+        return originalLookup(hostname, cb);
     }
 
+    // Handle case with options and callback
     if (typeof callback === 'function') {
-        // dns.lookup(hostname, options, callback)
         if (hostname && (hostname.includes('discord.com') || hostname.includes('discord.media'))) {
             dns.resolve4(hostname, (err, addresses) => {
                 if (err || !addresses || addresses.length === 0) {
-                    return originalLookup(hostname, options, callback);
+                    originalLookup(hostname, options, callback);
+                    return;
                 }
-                
-                if (options && (options as any).all) {
-                    callback(null, [{ address: addresses[0], family: 4 }]);
+
+                // Handle options.all = true case
+                if (options && (options as any).all === true) {
+                    const results: LookupAddress[] = [{ address: addresses[0], family: 4 }];
+                    (callback as any)(null, results);
                 } else {
-                    callback(null, addresses[0], 4);
+                    (callback as any)(null, addresses[0], 4);
                 }
             });
-        } else {
-            originalLookup(hostname, options, callback);
+            return {} as any;
         }
-        return;
+        return originalLookup(hostname, options, callback);
     }
 
     // Fallback
@@ -59,12 +61,12 @@ dns.lookup = patchedLookup;
 // Test connections at startup
 setTimeout(() => {
     console.log('[DNS-FIX] Testing Discord connection...');
-    const req = https.get('https://discord.com', { 
+    const req = https.get('https://discord.com', {
         headers: { 'Host': 'discord.com' },
         servername: 'discord.com'
     }, (res) => {
         console.log(`[DNS-FIX] ✅ Discord: ${res.statusCode}`);
-        res.resume(); // Consume response to free memory
+        res.resume();
     });
     req.on('error', (e) => {
         console.log(`[DNS-FIX] ❌ Discord: ${e.message}`);
