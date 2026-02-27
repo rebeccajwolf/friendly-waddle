@@ -101,7 +101,8 @@ net.Socket.prototype.connect = function(this: any, ...args: any[]) {
         const host = options.host;
         if (typeof host === 'string') {
             const cachedIp = ipCache.get(host);
-            if (cachedIp) {
+            // FIX: Check specifically for undefined
+            if (cachedIp !== undefined) {
                 const originalHost = host;
                 options.host = cachedIp;
                 this._originalServername = originalHost;
