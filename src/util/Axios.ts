@@ -1,4 +1,4 @@
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, AxiosRequestHeaders } from 'axios'
+import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios'
 import axiosRetry from 'axios-retry'
 import { HttpProxyAgent } from 'http-proxy-agent'
 import { HttpsProxyAgent } from 'https-proxy-agent'

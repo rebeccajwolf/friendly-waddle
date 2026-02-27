@@ -39,8 +39,8 @@ async function getSingleIP(hostname: string): Promise<string> {
         const cb = options;
         getSingleIP(hostname)
             .then(ip => cb(null, ip, 4))
-            .catch(err => originalLookup(hostname, cb));
-        return;
+            .catch(() => originalLookup(hostname, cb));
+        return {} as any;
     }
 
     // Handle options+callback case
@@ -53,8 +53,8 @@ async function getSingleIP(hostname: string): Promise<string> {
                     callback(null, ip, 4);
                 }
             })
-            .catch(err => originalLookup(hostname, options, callback));
-        return;
+            .catch(() => originalLookup(hostname, options, callback));
+        return {} as any;
     }
 
     return originalLookup(hostname, options, callback);
@@ -66,15 +66,15 @@ async function getSingleIP(hostname: string): Promise<string> {
         const cb = options;
         getSingleIP(hostname)
             .then(ip => cb(null, [ip]))
-            .catch(err => originalResolve4(hostname, cb));
-        return;
+            .catch(() => originalResolve4(hostname, cb));
+        return {} as any;
     }
 
     if (typeof callback === 'function') {
         getSingleIP(hostname)
             .then(ip => callback(null, [ip]))
-            .catch(err => originalResolve4(hostname, options, callback));
-        return;
+            .catch(() => originalResolve4(hostname, options, callback));
+        return {} as any;
     }
 
     return originalResolve4(hostname, options, callback);
@@ -87,7 +87,7 @@ if (dns.promises && dns.promises.resolve4) {
         try {
             const ip = await getSingleIP(hostname);
             return [ip];
-        } catch (err) {
+        } catch {
             return originalPromisesResolve4(hostname, options);
         }
     };
@@ -99,11 +99,15 @@ net.Socket.prototype.connect = function(this: any, ...args: any[]) {
     const options = args[0];
     if (options && typeof options === 'object' && options.host) {
         // If this is a hostname we've cached, ensure it's using the IP
-        if (ipCache.has(options.host)) {
-            const originalHost = options.host;
-            options.host = ipCache.get(options.host);
-            // Store original for SNI
-            this._originalServername = originalHost;
+        const host = options.host;
+        if (typeof host === 'string' && ipCache.has(host)) {
+            const cachedIp = ipCache.get(host);
+            if (cachedIp) {
+                const originalHost = host;
+                options.host = cachedIp;
+                // Store original for SNI
+                this._originalServername = originalHost;
+            }
         }
     }
     return originalConnect.apply(this, args as any);
