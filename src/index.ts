@@ -1,3 +1,49 @@
+// ===== DNS FIX - MUST BE FIRST =====
+import dns from 'dns';
+
+// Force Google DNS
+dns.setServers(['8.8.8.8', '8.8.4.4']);
+
+// Store original lookup
+const originalLookup = dns.lookup;
+
+// Patch to return ONLY ONE IP for ALL domains
+(dns as any).lookup = function(hostname: string, options: any, callback?: any) {
+    if (typeof options === 'function') {
+        const cb = options;
+        dns.resolve4(hostname, (err, addresses) => {
+            if (err || !addresses || addresses.length === 0) {
+                return originalLookup(hostname, cb);
+            }
+            // CRITICAL: Return only the first IP
+            cb(null, addresses[0], 4);
+        });
+        return;
+    }
+
+    if (typeof callback === 'function') {
+        dns.resolve4(hostname, (err, addresses) => {
+            if (err || !addresses || addresses.length === 0) {
+                return originalLookup(hostname, options, callback);
+            }
+            
+            if (options && options.all) {
+                callback(null, [{ address: addresses[0], family: 4 }]);
+            } else {
+                callback(null, addresses[0], 4);
+            }
+        });
+        return;
+    }
+
+    return originalLookup(hostname, options, callback);
+};
+
+// Copy promisify property
+(dns as any).lookup.__promisify__ = originalLookup.__promisify__;
+// ===== END DNS FIX =====
+
+
 import { AsyncLocalStorage } from 'node:async_hooks'
 import cluster, { Worker } from 'cluster'
 import type { BrowserContext, Cookie, Page } from 'patchright'
