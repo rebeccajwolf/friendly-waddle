@@ -15,10 +15,10 @@ const ipCache: Map<string, string> = new Map();
 
 // Helper to get single IP
 async function getSingleIP(hostname: string): Promise<string> {
-    // Check cache first
-    const cached = ipCache.get(hostname);
-    if (cached !== undefined) {
-        return cached;
+    // Check cache first - FIX: Use a variable to store the result
+    const cachedIp = ipCache.get(hostname);
+    if (cachedIp !== undefined) {
+        return cachedIp;
     }
     
     return new Promise((resolve, reject) => {
@@ -28,8 +28,12 @@ async function getSingleIP(hostname: string): Promise<string> {
                 return;
             }
             const ip = addresses[0];
-            ipCache.set(hostname, ip);
-            resolve(ip);
+            if (ip !== undefined) {
+                ipCache.set(hostname, ip);
+                resolve(ip);
+            } else {
+                reject(new Error('IP address is undefined'));
+            }
         });
     });
 }
