@@ -56,15 +56,17 @@ const originalLookup = dns.lookup;
 // Test connections at startup
 setTimeout(() => {
     console.log('[DNS-FIX] Testing Discord connection...');
-    const req = https.get('https://discord.com', {
+    // Test via IP directly
+    const req = https.get('https://162.159.138.232', {
         headers: { 'Host': 'discord.com' },
-        servername: 'discord.com'
+        servername: 'discord.com',
+        rejectUnauthorized: false
     }, (res) => {
-        console.log(`[DNS-FIX] ✅ Discord: ${res.statusCode}`);
+        console.log(`[DNS-FIX] ✅ Discord IP: ${res.statusCode}`);
         res.resume();
     });
     req.on('error', (e) => {
-        console.log(`[DNS-FIX] ❌ Discord: ${e.message}`);
+        console.log(`[DNS-FIX] ❌ Discord IP: ${e.message}`);
     });
     req.end();
 }, 2000);

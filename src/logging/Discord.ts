@@ -1,6 +1,7 @@
 import axios, { AxiosRequestConfig } from 'axios';
 import PQueue from 'p-queue';
 import https from 'https';
+import tls from 'tls'; // Add this import
 import type { LogLevel } from './Logger';
 
 const DISCORD_LIMIT = 2000;
@@ -20,69 +21,54 @@ function truncate(text: string): string {
     return text.length <= DISCORD_LIMIT ? text : text.slice(0, DISCORD_LIMIT - 14) + ' …(truncated)';
 }
 
+// Discord's known IPs (from your hostrules)
+const DISCORD_IPS = ['162.159.138.232'];
+
 export async function sendDiscord(discordUrl: string, content: string, level: LogLevel, originalHostname?: string): Promise<void> {
     if (!discordUrl) return;
 
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (originalHostname) {
-        headers['Host'] = originalHostname;
-    }
+    // Extract webhook path
+    const webhookPath = discordUrl.replace(/https?:\/\/[^\/]+/, '');
+    
+    // Try each Discord IP
+    for (const ip of DISCORD_IPS) {
+        const ipUrl = `https://${ip}${webhookPath}`;
+        
+        const headers: Record<string, string> = { 
+            'Content-Type': 'application/json',
+            'Host': 'discord.com' // Always set Host header
+        };
 
-    const request: AxiosRequestConfig = {
-        method: 'POST',
-        url: discordUrl,
-        headers,
-        data: { content: truncate(content), allowed_mentions: { parse: [] } },
-        timeout: 20000, // INCREASED FROM 10000ms TO 20000ms
-        // Add these options to help with slow connections
-        maxContentLength: 2000,
-        maxBodyLength: 2000
-    };
+        const request: AxiosRequestConfig = {
+            method: 'POST',
+            url: ipUrl,
+            headers,
+            data: { content: truncate(content), allowed_mentions: { parse: [] } },
+            timeout: 15000,
+            httpsAgent: new https.Agent({
+                rejectUnauthorized: false, // Allow self-signed certs
+                servername: 'discord.com', // SNI for TLS
+                secureProtocol: 'TLSv1_2_method', // Force TLS 1.2 (Discord requires it)
+                ciphers: tls.getCiphers().join(':'), // Use all available ciphers
+                honorCipherOrder: true
+            })
+        };
 
-    if (originalHostname) {
-        request.httpsAgent = new https.Agent({
-            rejectUnauthorized: false,
-            servername: originalHostname,
-            keepAlive: true, // Keep connection alive
-            timeout: 20000 // Agent timeout
-        });
-    }
-
-    await discordQueue.add(async () => {
-        // Add retry logic with exponential backoff
-        const maxRetries = 3;
-        for (let i = 0; i < maxRetries; i++) {
-            try {
+        try {
+            await discordQueue.add(async () => {
                 await axios(request);
+                console.log(`[Discord] ✅ Sent via IP ${ip}`);
                 return; // Success!
-            } catch (err: any) {
-                const status = err?.response?.status;
-                if (status === 429) {
-                    // Rate limited - Discord's docs say wait and retry [citation:1]
-                    const retryAfter = err?.response?.headers?.['retry-after'] || 5;
-                    await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
-                    continue;
-                }
-                
-                // If it's a timeout and we have retries left, wait and retry
-                if (err.code === 'ECONNABORTED' && i < maxRetries - 1) {
-                    console.log(`[Discord] Timeout, retrying (${i + 1}/${maxRetries})...`);
-                    await new Promise(resolve => setTimeout(resolve, 2000 * (i + 1))); // Exponential backoff
-                    continue;
-                }
-                
-                // Other errors - log but don't retry
-                if (i === maxRetries - 1 || (status && status !== 429)) {
-                    console.error('[Discord] Failed to send webhook:', {
-                        status,
-                        message: err?.message,
-                        code: err?.code,
-                        url: discordUrl.substring(0, 50) + '...'
-                    });
-                }
-            }
+            });
+            return; // Exit function on success
+        } catch (err: any) {
+            console.log(`[Discord] ❌ Failed via IP ${ip}: ${err.code || err.message}`);
+            // Continue to next IP
         }
-    });
+    }
+    
+    // All IPs failed
+    console.error('[Discord] All IPs failed');
 }
 
 export async function flushDiscordQueue(timeoutMs = 5000): Promise<void> {
