@@ -1,26 +1,30 @@
 // ===== DNS FIX FOR HUGGING FACE =====
-// This MUST be the first code executed
 import dns from 'dns';
 import https from 'https';
 
 // Force Google DNS
 dns.setServers(['8.8.8.8', '8.8.4.4']);
-dns.setDefaultResultOrder('ipv4first');
 
-// Create a wrapper function that preserves all properties
+// Store original lookup
 const originalLookup = dns.lookup;
 
-// Cast to any to bypass TypeScript's strict checking
+// Patch to use discordapp.com for resolution
 (dns as any).lookup = function(hostname: string, options: any, callback?: any) {
-    // Handle different argument patterns
+    // Replace discord.com with discordapp.com for resolution
+    let resolveHost = hostname;
+    if (hostname === 'discord.com' || hostname.endsWith('.discord.com')) {
+        resolveHost = hostname.replace('discord.com', 'discordapp.com');
+    }
+
+    // Handle callback-only case
     if (typeof options === 'function') {
         const cb = options;
-        if (hostname && (hostname.includes('discord.com') || hostname.includes('discord.media'))) {
-            dns.resolve4(hostname, (err, addresses) => {
+        if (hostname.includes('discord.com')) {
+            dns.resolve4(resolveHost, (err, addresses) => {
                 if (err || !addresses || addresses.length === 0) {
-                    originalLookup(hostname, cb);
-                    return;
+                    return originalLookup(hostname, cb);
                 }
+                // Return first IP only
                 cb(null, addresses[0], 4);
             });
             return;
@@ -28,16 +32,16 @@ const originalLookup = dns.lookup;
         return originalLookup(hostname, cb);
     }
 
+    // Handle options+callback case
     if (typeof callback === 'function') {
-        if (hostname && (hostname.includes('discord.com') || hostname.includes('discord.media'))) {
-            dns.resolve4(hostname, (err, addresses) => {
+        if (hostname.includes('discord.com')) {
+            dns.resolve4(resolveHost, (err, addresses) => {
                 if (err || !addresses || addresses.length === 0) {
-                    originalLookup(hostname, options, callback);
-                    return;
+                    return originalLookup(hostname, options, callback);
                 }
-
+                
                 if (options && options.all) {
-                    callback(null, [{ address: addresses[0], family: 4 }]);
+                    callback(null, addresses.map(addr => ({ address: addr, family: 4 })));
                 } else {
                     callback(null, addresses[0], 4);
                 }
@@ -50,25 +54,22 @@ const originalLookup = dns.lookup;
     return originalLookup(hostname, options, callback);
 };
 
-// Copy over the promisify property
+// Copy promisify property
 (dns as any).lookup.__promisify__ = originalLookup.__promisify__;
 
-// Test connections at startup
+// Test at startup
 setTimeout(() => {
-    console.log('[DNS-FIX] Testing Discord connection...');
-    // Test via IP directly
-    const req = https.get('https://162.159.138.232', {
+    console.log('[DNS-FIX] Testing Discord via discordapp.com...');
+    https.get('https://discord.com', { 
         headers: { 'Host': 'discord.com' },
         servername: 'discord.com',
         rejectUnauthorized: false
     }, (res) => {
-        console.log(`[DNS-FIX] ✅ Discord IP: ${res.statusCode}`);
+        console.log(`[DNS-FIX] ✅ Discord: ${res.statusCode}`);
         res.resume();
+    }).on('error', (e) => {
+        console.log(`[DNS-FIX] ❌ Discord: ${e.message}`);
     });
-    req.on('error', (e) => {
-        console.log(`[DNS-FIX] ❌ Discord IP: ${e.message}`);
-    });
-    req.end();
 }, 2000);
 // ===== END DNS FIX =====
 
