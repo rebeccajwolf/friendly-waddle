@@ -10,15 +10,19 @@ function truncate(text: string): string {
     return text.length <= DISCORD_LIMIT ? text : text.slice(0, DISCORD_LIMIT - 14) + ' …(truncated)';
 }
 
-export async function sendDiscord(discordUrl: string, content: string, level: LogLevel): Promise<void> {
+export async function sendDiscord(discordUrl: string, content: string, level: LogLevel, originalHostname?: string): Promise<void> {
     if (!discordUrl) return;
 
     // Extract webhook info
     const match = discordUrl.match(/\/webhooks\/(\d+)\/([^\/]+)/);
     if (!match) return;
 
-    // Use discordapp.com endpoint (THIS IS CRITICAL)
-    const webhookUrl = `https://discordapp.com/api/webhooks/${match[1]}/${match[2]}`;
+    // If originalHostname is discord.com, use discordapp.com endpoint
+    // Otherwise keep original URL (for other services like ntfy)
+    let webhookUrl = discordUrl;
+    if (originalHostname === 'discord.com') {
+        webhookUrl = `https://discordapp.com/api/webhooks/${match[1]}/${match[2]}`;
+    }
 
     await discordQueue.add(async () => {
         try {
@@ -27,10 +31,10 @@ export async function sendDiscord(discordUrl: string, content: string, level: Lo
                 allowed_mentions: { parse: [] }
             }, {
                 timeout: 15000,
-                httpsAgent: new https.Agent({
+                httpsAgent: originalHostname === 'discord.com' ? new https.Agent({
                     rejectUnauthorized: false,
-                    servername: 'discordapp.com' // SNI for discordapp.com
-                })
+                    servername: 'discordapp.com'
+                }) : undefined
             });
         } catch (err: any) {
             if (err?.response?.status !== 429) {
@@ -38,7 +42,7 @@ export async function sendDiscord(discordUrl: string, content: string, level: Lo
             }
         }
     });
-}
+}}
 
 export async function flushDiscordQueue(timeoutMs = 5000): Promise<void> {
     await Promise.race([
