@@ -1,7 +1,48 @@
 #!/bin/bash
 
-export CHROME_HOST_RULES="MAP rewards.bing.com 150.171.28.10,MAP www.bing.com 150.171.28.10,MAP account.microsoft.com 150.171.28.10,MAP prod.rewardsplatform.microsoft.com 52.190.158.80"
+# DNS BYPASS: Set up custom DNS resolution at runtime (with fallbacks for read-only systems)
+echo "Setting up DNS bypass..."
 
+# Try to modify resolv.conf, fallback to environment variables if read-only
+if [ -w /etc/resolv.conf ]; then
+    echo "nameserver 8.8.8.8" > /etc/resolv.conf
+    echo "nameserver 8.8.4.4" >> /etc/resolv.conf
+    echo "nameserver 1.1.1.1" >> /etc/resolv.conf
+    echo "nameserver 1.0.0.1" >> /etc/resolv.conf
+    echo "DNS configuration updated in /etc/resolv.conf"
+else
+    echo "Warning: /etc/resolv.conf is read-only, using alternative DNS methods"
+    # Set environment variables for DNS resolution
+    export RESOLV_CONF_OVERRIDE="nameserver 8.8.8.8\nnameserver 8.8.4.4\nnameserver 1.1.1.1\nnameserver 1.0.0.1"
+fi
+
+# Try to add hosts entries, with fallback for read-only systems
+if [ -w /etc/hosts ]; then
+    echo "# DNS bypass for blocked domains" >> /etc/hosts
+    echo "204.79.197.200 rewards.bing.com" >> /etc/hosts
+    echo "204.79.197.200 www.bing.com" >> /etc/hosts
+    echo "13.107.42.14 rewards.bing.com" >> /etc/hosts
+    echo "204.79.197.200 account.microsoft.com" >> /etc/hosts
+    echo "Host entries added to /etc/hosts"
+else
+    echo "Warning: /etc/hosts is read-only, using Chrome host-rules instead"
+    export CHROME_HOST_RULES="MAP rewards.bing.com 150.171.28.10,MAP www.bing.com 150.171.28.10,MAP account.microsoft.com 150.171.28.10,MAP prod.rewardsplatform.microsoft.com 52.190.158.80"
+fi
+
+# Try to resolve rewards.bing.com and add to hosts if needed
+echo "Testing DNS resolution for rewards.bing.com..."
+REWARDS_IP=$(nslookup rewards.bing.com 8.8.8.8 2>/dev/null | grep 'Address:' | tail -1 | awk '{print $2}' 2>/dev/null || echo "")
+if [ ! -z "$REWARDS_IP" ] && [ "$REWARDS_IP" != "8.8.8.8" ]; then
+    if [ -w /etc/hosts ]; then
+        echo "$REWARDS_IP rewards.bing.com" >> /etc/hosts
+        echo "Added resolved IP $REWARDS_IP for rewards.bing.com to hosts file"
+    else
+        export CHROME_HOST_RULES="${CHROME_HOST_RULES},MAP rewards.bing.com $REWARDS_IP"
+        echo "Will use Chrome host-rules for $REWARDS_IP"
+    fi
+else
+    echo "Could not resolve rewards.bing.com, using fallback IPs"
+fi
 
 cd /home/user/app
 
