@@ -3,6 +3,7 @@ import axiosRetry from 'axios-retry'
 import { HttpProxyAgent } from 'http-proxy-agent'
 import { HttpsProxyAgent } from 'https-proxy-agent'
 import { SocksProxyAgent } from 'socks-proxy-agent'
+import https from 'https'
 import { URL } from 'url'
 import type { AccountProxy } from '../interface/Account'
 
@@ -13,9 +14,15 @@ class AxiosClient {
     constructor(account: AccountProxy) {
         this.account = account
 
+        // Create HTTPS agent that ignores certificate errors
+        const httpsAgent = new https.Agent({
+            rejectUnauthorized: false,  // CRITICAL: Ignore SSL certificate mismatches
+            keepAlive: true
+        });
+
         this.instance = axios.create({
             timeout: 30000,
-            // Don't let axios transform headers
+            httpsAgent: httpsAgent,
             transformRequest: [(data, headers) => {
                 // CRITICAL: Preserve Host header if it exists
                 if (headers && headers['Host']) {
@@ -45,6 +52,13 @@ class AxiosClient {
                     config.headers['X-Original-Host'] = config.headers['Host'];
                 }
             }
+
+            // Ensure httpsAgent has rejectUnauthorized: false
+            if (!config.httpsAgent) {
+                config.httpsAgent = new https.Agent({
+                    rejectUnauthorized: false
+                });
+            }
             
             return config;
         });
@@ -64,6 +78,7 @@ class AxiosClient {
             retryCondition: (error) => {
                 // Retry on timeouts and network errors
                 if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+                    console.log(`[Axios] Timeout detected, retrying...`);
                     return true;
                 }
                 if (axiosRetry.isNetworkError(error)) return true;
@@ -127,6 +142,13 @@ class AxiosClient {
             headers: headers as AxiosRequestHeaders
         };
 
+        // Ensure httpsAgent ignores certificate errors
+        if (!finalConfig.httpsAgent) {
+            finalConfig.httpsAgent = new https.Agent({
+                rejectUnauthorized: false
+            });
+        }
+
         // CRITICAL: If using proxy, we need to be extra careful with headers
         if (this.account.url && this.account.proxyAxios && !bypassProxy) {
             // Some proxies require the Host header to be the original domain
@@ -140,6 +162,9 @@ class AxiosClient {
             if (bypassProxy) {
                 const bypassInstance = axios.create({
                     timeout: 30000,
+                    httpsAgent: new https.Agent({
+                        rejectUnauthorized: false
+                    }),
                     transformRequest: [(data, headers) => {
                         if (headers && hostHeader) {
                             (headers as Record<string, string>)['Host'] = hostHeader;
