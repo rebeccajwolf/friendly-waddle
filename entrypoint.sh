@@ -1,11 +1,5 @@
 #!/bin/bash
 
-# Test with curl (command line)
-curl -v -H "Host: rewards.bing.com" https://150.171.27.10/api/getuserinfo?type=1
-
-# Test with wget
-wget --header="Host: rewards.bing.com" https://150.171.27.10/api/getuserinfo?type=1
-
 export CHROME_HOST_RULES="MAP rewards.bing.com 150.171.28.10,MAP www.bing.com 150.171.28.10,MAP account.microsoft.com 150.171.28.10,MAP prod.rewardsplatform.microsoft.com 52.190.158.80"
 
 
