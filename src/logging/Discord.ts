@@ -1,6 +1,7 @@
 import axios, { AxiosRequestConfig } from 'axios'
 import PQueue from 'p-queue'
 import https from 'https'
+import dns from 'dns'  // Add this import
 import type { LogLevel } from './Logger'
 
 const DISCORD_LIMIT = 2000
@@ -33,13 +34,19 @@ export async function sendDiscord(discordUrl: string, content: string, level: Lo
         url: discordUrl,
         headers,
         data: { content: truncate(content), allowed_mentions: { parse: [] } },
-        timeout: 10000
+        timeout: 10000,
+        // Force IPv4 and use our patched DNS
+        family: 4
     }
 
     if (originalHostname) {
         request.httpsAgent = new https.Agent({
             rejectUnauthorized: false,
-            servername: originalHostname
+            servername: originalHostname,
+            // Force IPv4
+            lookup: (hostname, options, callback) => {
+                dns.lookup(hostname, { ...options, family: 4 }, callback);
+            }
         })
     }
 
@@ -49,7 +56,6 @@ export async function sendDiscord(discordUrl: string, content: string, level: Lo
         } catch (err: any) {
             const status = err?.response?.status
             if (status === 429) {
-                //console.warn('[Discord] Rate limited (429)')
                 return
             }
             console.error('[Discord] Failed to send webhook:', {

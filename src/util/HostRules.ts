@@ -25,7 +25,7 @@ export class HostRulesManager {
         this.hostRules.set('wikimedia.org', '198.35.26.96')
         this.hostRules.set('www.reddit.com', '151.101.1.140')
         this.hostRules.set('raw.githubusercontent.com', '185.199.108.133')
-        this.hostRules.set('discord.com', '162.159.138.232')
+        //this.hostRules.set('discord.com', '162.159.138.232')
     }
 
     private isIPv6(host: string): boolean {

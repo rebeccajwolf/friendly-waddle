@@ -1,3 +1,58 @@
+// ===== DNS FIX FOR HUGGING FACE =====
+// This MUST be the first code executed
+import dns from 'dns';
+import https from 'https';
+
+// Force Google DNS
+dns.setServers(['8.8.8.8', '8.8.4.4']);
+dns.setDefaultResultOrder('ipv4first');
+
+// Store original lookup
+const originalLookup = dns.lookup;
+
+// Monkey-patch to return SINGLE IP for Discord domains
+dns.lookup = function(hostname: string, options: any, callback?: any) {
+    if (typeof options === 'function') {
+        callback = options;
+        options = {};
+    }
+
+    // For Discord domains, force single IP resolution
+    if (hostname && (hostname.includes('discord.com') || hostname.includes('discord.media'))) {
+        dns.resolve4(hostname, (err, addresses) => {
+            if (err || !addresses || addresses.length === 0) {
+                return originalLookup(hostname, options, callback);
+            }
+            
+            // CRITICAL: Return ONLY ONE IP to prevent Happy Eyeballs EPERM
+            if (options.all) {
+                callback(null, [{ address: addresses[0], family: 4 }]);
+            } else {
+                callback(null, addresses[0], 4);
+            }
+        });
+        return;
+    }
+    
+    // For all other domains, use original lookup
+    originalLookup(hostname, options, callback);
+};
+
+// Test connections at startup
+setTimeout(() => {
+    console.log('[DNS-FIX] Testing Discord connection...');
+    https.get('https://discord.com', { 
+        headers: { 'Host': 'discord.com' },
+        servername: 'discord.com'
+    }, (res) => {
+        console.log(`[DNS-FIX] ✅ Discord: ${res.statusCode}`);
+    }).on('error', (e) => {
+        console.log(`[DNS-FIX] ❌ Discord: ${e.message}`);
+    });
+}, 2000);
+// ===== END DNS FIX =====
+
+
 import { AsyncLocalStorage } from 'node:async_hooks'
 import cluster, { Worker } from 'cluster'
 import type { BrowserContext, Cookie, Page } from 'patchright'
