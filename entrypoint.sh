@@ -1,5 +1,12 @@
 #!/bin/bash
 
+
+# This should show your IPv4 address
+curl -4 ip.sb
+
+# This shows which IP version is used by default
+curl ip.sb
+
 export CHROME_HOST_RULES="MAP rewards.bing.com 150.171.28.10,MAP www.bing.com 150.171.28.10,MAP account.microsoft.com 150.171.28.10,MAP prod.rewardsplatform.microsoft.com 52.190.158.80"
 
 

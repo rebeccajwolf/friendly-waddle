@@ -15,8 +15,10 @@ const ipCache: Map<string, string> = new Map();
 
 // Helper to get single IP
 async function getSingleIP(hostname: string): Promise<string> {
-    if (ipCache.has(hostname)) {
-        return ipCache.get(hostname)!;
+    // Check cache first
+    const cached = ipCache.get(hostname);
+    if (cached !== undefined) {
+        return cached;
     }
     
     return new Promise((resolve, reject) => {
@@ -40,7 +42,7 @@ async function getSingleIP(hostname: string): Promise<string> {
         getSingleIP(hostname)
             .then(ip => cb(null, ip, 4))
             .catch(() => originalLookup(hostname, cb));
-        return {} as any;
+        return;
     }
 
     // Handle options+callback case
@@ -54,7 +56,7 @@ async function getSingleIP(hostname: string): Promise<string> {
                 }
             })
             .catch(() => originalLookup(hostname, options, callback));
-        return {} as any;
+        return;
     }
 
     return originalLookup(hostname, options, callback);
@@ -67,14 +69,14 @@ async function getSingleIP(hostname: string): Promise<string> {
         getSingleIP(hostname)
             .then(ip => cb(null, [ip]))
             .catch(() => originalResolve4(hostname, cb));
-        return {} as any;
+        return;
     }
 
     if (typeof callback === 'function') {
         getSingleIP(hostname)
             .then(ip => callback(null, [ip]))
             .catch(() => originalResolve4(hostname, options, callback));
-        return {} as any;
+        return;
     }
 
     return originalResolve4(hostname, options, callback);
@@ -101,7 +103,7 @@ net.Socket.prototype.connect = function(this: any, ...args: any[]) {
         const host = options.host;
         if (typeof host === 'string') {
             const cachedIp = ipCache.get(host);
-            // FIX: Check specifically for undefined
+            // FIX: Check for undefined explicitly
             if (cachedIp !== undefined) {
                 const originalHost = host;
                 options.host = cachedIp;
