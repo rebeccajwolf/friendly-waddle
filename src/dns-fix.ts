@@ -6,12 +6,13 @@ import tls from 'tls';
 // Force Google DNS
 dns.setServers(['8.8.8.8', '8.8.4.4']);
 
-// Pre-resolve discordapp.com (the key domain)
+// ONLY pre-resolve Discord domains
 const RESOLVED_IPS: Record<string, string[]> = {};
 
 async function preResolveHosts() {
-    console.log('[DNS-FIX] Pre-resolving hosts...');
-    const hosts = ['discordapp.com', 'gateway.discord.gg', 'api.groq.com'];
+    console.log('[DNS-FIX] Pre-resolving Discord hosts...');
+    // ONLY Discord-related domains
+    const hosts = ['discordapp.com', 'gateway.discord.gg', 'discord.com'];
     
     for (const host of hosts) {
         try {
@@ -22,51 +23,76 @@ async function preResolveHosts() {
             console.log(`[DNS-FIX] ⚠️ Failed to resolve ${host}`);
         }
     }
-    
-    // Map discord.com to use discordapp.com IPs
-    if (RESOLVED_IPS['discordapp.com']) {
-        RESOLVED_IPS['discord.com'] = RESOLVED_IPS['discordapp.com'];
-    }
 }
 
-// Patch socket connections at the lowest level
+// Patch socket connections - ONLY for Discord domains
 const originalConnect = net.Socket.prototype.connect;
 
 net.Socket.prototype.connect = function(this: any, ...args: any[]) {
     const options = args[0];
+    
+    // ONLY intercept if this is a Discord connection
     if (options && typeof options === 'object') {
         const host = options.host || options.servername;
-        if (host && (host.includes('discord.com') || host.includes('discordapp.com'))) {
-            const useHost = host.includes('discordapp.com') ? 'discordapp.com' : 'discord.com';
-            if (RESOLVED_IPS[useHost]) {
-                const ip = RESOLVED_IPS[useHost][0];
-                console.log(`[DNS-FIX] 🔄 Rewriting connection: ${host} -> ${ip}`);
-                options.host = ip;
+        
+        // STRICT CHECK: Only modify Discord domains
+        if (host && (
+            host === 'discord.com' || 
+            host === 'discordapp.com' || 
+            host === 'gateway.discord.gg' ||
+            host.endsWith('.discord.com') || 
+            host.endsWith('.discordapp.com')
+        )) {
+            
+            // Use discordapp.com for resolution if needed
+            const resolveHost = host.includes('discordapp.com') ? 'discordapp.com' : 'discord.com';
+            
+            if (RESOLVED_IPS[resolveHost]) {
+                // Pick first IP (avoid multiple connections)
+                const ip = RESOLVED_IPS[resolveHost][0];
+                console.log(`[DNS-FIX] 🔄 Discord connection: ${host} -> ${ip}`);
+                
                 // Store original host for TLS SNI
+                options.host = ip;
                 this._originalServername = host;
             }
         }
+        // ALL OTHER DOMAINS (rewards.bing.com, etc.) are left untouched
     }
+    
     return originalConnect.apply(this, args as any);
 };
 
-// Patch TLS to use correct SNI
+// Patch TLS - ONLY for Discord
 const originalTLSCreateSecureContext = tls.createSecureContext;
 tls.createSecureContext = function(options: any) {
-    if (options.servername && options.servername.includes('discord.com')) {
-        // Keep original servername for SNI
+    // Only log Discord connections, don't modify
+    if (options.servername && (
+        options.servername.includes('discord.com') || 
+        options.servername.includes('discordapp.com')
+    )) {
         console.log(`[DNS-FIX] 🔒 TLS SNI: ${options.servername}`);
     }
     return originalTLSCreateSecureContext.call(this, options);
 };
 
-// Patch dns.lookup as fallback
+// Patch dns.lookup - ONLY for Discord
 const originalLookup = dns.lookup;
 (dns as any).lookup = function(hostname: string, options: any, callback?: any) {
-    if (hostname.includes('discord.com') || hostname.includes('discordapp.com')) {
-        const useHost = hostname.includes('discordapp.com') ? 'discordapp.com' : 'discord.com';
-        if (RESOLVED_IPS[useHost]) {
-            const ip = RESOLVED_IPS[useHost][0];
+    // ONLY intercept Discord domains
+    if (hostname && (
+        hostname === 'discord.com' || 
+        hostname === 'discordapp.com' || 
+        hostname === 'gateway.discord.gg' ||
+        hostname.endsWith('.discord.com') || 
+        hostname.endsWith('.discordapp.com')
+    )) {
+        
+        const resolveHost = hostname.includes('discordapp.com') ? 'discordapp.com' : 'discord.com';
+        
+        if (RESOLVED_IPS[resolveHost]) {
+            const ip = RESOLVED_IPS[resolveHost][0];
+            
             if (typeof options === 'function') {
                 options(null, ip, 4);
                 return;
@@ -81,12 +107,14 @@ const originalLookup = dns.lookup;
             }
         }
     }
+    
+    // ALL OTHER DOMAINS use original lookup
     return originalLookup(hostname, options as any, callback as any);
 };
 
 // Run pre-resolution immediately
 preResolveHosts().then(() => {
-    console.log('[DNS-FIX] ✅ Ready');
+    console.log('[DNS-FIX] ✅ Ready - Only Discord domains are modified');
 });
 
 // Export for use in other files
