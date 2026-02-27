@@ -20,8 +20,14 @@ export async function sendDiscord(discordUrl: string, content: string, level: Lo
     // If originalHostname is discord.com, use discordapp.com endpoint
     // Otherwise keep original URL (for other services like ntfy)
     let webhookUrl = discordUrl;
+    let httpsAgent = undefined;
+
     if (originalHostname === 'discord.com') {
         webhookUrl = `https://discordapp.com/api/webhooks/${match[1]}/${match[2]}`;
+        httpsAgent = new https.Agent({
+            rejectUnauthorized: false,
+            servername: 'discordapp.com'
+        });
     }
 
     await discordQueue.add(async () => {
@@ -31,10 +37,7 @@ export async function sendDiscord(discordUrl: string, content: string, level: Lo
                 allowed_mentions: { parse: [] }
             }, {
                 timeout: 15000,
-                httpsAgent: originalHostname === 'discord.com' ? new https.Agent({
-                    rejectUnauthorized: false,
-                    servername: 'discordapp.com'
-                }) : undefined
+                httpsAgent: httpsAgent
             });
         } catch (err: any) {
             if (err?.response?.status !== 429) {
@@ -42,7 +45,7 @@ export async function sendDiscord(discordUrl: string, content: string, level: Lo
             }
         }
     });
-}}
+}
 
 export async function flushDiscordQueue(timeoutMs = 5000): Promise<void> {
     await Promise.race([
