@@ -98,14 +98,12 @@ const originalConnect = net.Socket.prototype.connect;
 net.Socket.prototype.connect = function(this: any, ...args: any[]) {
     const options = args[0];
     if (options && typeof options === 'object' && options.host) {
-        // If this is a hostname we've cached, ensure it's using the IP
         const host = options.host;
-        if (typeof host === 'string' && ipCache.has(host)) {
+        if (typeof host === 'string') {
             const cachedIp = ipCache.get(host);
             if (cachedIp) {
                 const originalHost = host;
                 options.host = cachedIp;
-                // Store original for SNI
                 this._originalServername = originalHost;
             }
         }
