@@ -1,6 +1,3 @@
-import './dns-fix';  // Import DNS fix before anything else
-
-
 import { AsyncLocalStorage } from 'node:async_hooks'
 import cluster, { Worker } from 'cluster'
 import type { BrowserContext, Cookie, Page } from 'patchright'
