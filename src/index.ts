@@ -10,45 +10,66 @@ dns.setDefaultResultOrder('ipv4first');
 // Store original lookup
 const originalLookup = dns.lookup;
 
-// Monkey-patch to return SINGLE IP for Discord domains
-dns.lookup = function(hostname: string, options: any, callback?: any) {
+// Properly typed monkey-patch
+const patchedLookup: typeof dns.lookup = (hostname, options, callback) => {
+    // Handle different overloads
     if (typeof options === 'function') {
-        callback = options;
-        options = {};
-    }
-
-    // For Discord domains, force single IP resolution
-    if (hostname && (hostname.includes('discord.com') || hostname.includes('discord.media'))) {
-        dns.resolve4(hostname, (err, addresses) => {
-            if (err || !addresses || addresses.length === 0) {
-                return originalLookup(hostname, options, callback);
-            }
-            
-            // CRITICAL: Return ONLY ONE IP to prevent Happy Eyeballs EPERM
-            if (options.all) {
-                callback(null, [{ address: addresses[0], family: 4 }]);
-            } else {
-                callback(null, addresses[0], 4);
-            }
-        });
+        // dns.lookup(hostname, callback)
+        const cb = options;
+        if (hostname && (hostname.includes('discord.com') || hostname.includes('discord.media'))) {
+            dns.resolve4(hostname, (err, addresses) => {
+                if (err || !addresses || addresses.length === 0) {
+                    return originalLookup(hostname, cb);
+                }
+                cb(null, addresses[0], 4);
+            });
+        } else {
+            originalLookup(hostname, cb);
+        }
         return;
     }
-    
-    // For all other domains, use original lookup
-    originalLookup(hostname, options, callback);
+
+    if (typeof callback === 'function') {
+        // dns.lookup(hostname, options, callback)
+        if (hostname && (hostname.includes('discord.com') || hostname.includes('discord.media'))) {
+            dns.resolve4(hostname, (err, addresses) => {
+                if (err || !addresses || addresses.length === 0) {
+                    return originalLookup(hostname, options, callback);
+                }
+                
+                if (options && (options as any).all) {
+                    callback(null, [{ address: addresses[0], family: 4 }]);
+                } else {
+                    callback(null, addresses[0], 4);
+                }
+            });
+        } else {
+            originalLookup(hostname, options, callback);
+        }
+        return;
+    }
+
+    // Fallback
+    return originalLookup(hostname, options as any, callback as any);
 };
+
+// Apply the patch
+dns.lookup = patchedLookup;
 
 // Test connections at startup
 setTimeout(() => {
     console.log('[DNS-FIX] Testing Discord connection...');
-    https.get('https://discord.com', { 
+    const req = https.get('https://discord.com', { 
         headers: { 'Host': 'discord.com' },
         servername: 'discord.com'
     }, (res) => {
         console.log(`[DNS-FIX] ✅ Discord: ${res.statusCode}`);
-    }).on('error', (e) => {
+        res.resume(); // Consume response to free memory
+    });
+    req.on('error', (e) => {
         console.log(`[DNS-FIX] ❌ Discord: ${e.message}`);
     });
+    req.end();
 }, 2000);
 // ===== END DNS FIX =====
 

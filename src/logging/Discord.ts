@@ -1,7 +1,8 @@
 import axios, { AxiosRequestConfig } from 'axios'
 import PQueue from 'p-queue'
 import https from 'https'
-import dns from 'dns'  // Add this import
+import dns from 'dns'
+import type { LookupOneOptions, LookupAllOptions } from 'dns'
 import type { LogLevel } from './Logger'
 
 const DISCORD_LIMIT = 2000
@@ -34,18 +35,21 @@ export async function sendDiscord(discordUrl: string, content: string, level: Lo
         url: discordUrl,
         headers,
         data: { content: truncate(content), allowed_mentions: { parse: [] } },
-        timeout: 10000,
-        // Force IPv4 and use our patched DNS
-        family: 4
+        timeout: 10000
     }
 
     if (originalHostname) {
         request.httpsAgent = new https.Agent({
             rejectUnauthorized: false,
             servername: originalHostname,
-            // Force IPv4
             lookup: (hostname, options, callback) => {
-                dns.lookup(hostname, { ...options, family: 4 }, callback);
+                // Force IPv4
+                if (typeof options === 'number') {
+                    dns.lookup(hostname, 4, callback);
+                } else {
+                    const opts = typeof options === 'object' ? { ...options, family: 4 } : { family: 4 };
+                    dns.lookup(hostname, opts, callback);
+                }
             }
         })
     }
