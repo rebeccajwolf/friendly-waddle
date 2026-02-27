@@ -14,27 +14,65 @@ class AxiosClient {
         this.account = account
 
         this.instance = axios.create({
-            timeout: 20000
-        })
+            timeout: 30000,
+            // Don't let axios transform headers
+            transformRequest: [(data, headers) => {
+                // CRITICAL: Preserve Host header if it exists
+                if (headers && headers['Host']) {
+                    // Store it in a way that survives
+                    headers['Host'] = headers['Host'];
+                }
+                return data;
+            }]
+        });
+
+        // Interceptor to ensure Host header is never dropped
+        this.instance.interceptors.request.use((config) => {
+            // If there's a Host header in the original request, make sure it's in the final config
+            if (config.headers && config.headers['Host']) {
+                // Force it to stay
+                config.headers['Host'] = config.headers['Host'];
+                
+                // Log for debugging
+                console.log(`[Axios] Sending request to ${config.url} with Host: ${config.headers['Host']}`);
+            }
+            
+            // If using proxy, ensure Host header is preserved
+            if (this.account.url && this.account.proxyAxios) {
+                // Some proxies strip headers, so we need to be extra careful
+                if (config.headers && config.headers['Host']) {
+                    // Store in a custom header that proxies won't touch
+                    config.headers['X-Original-Host'] = config.headers['Host'];
+                }
+            }
+            
+            return config;
+        });
 
         if (this.account.url && this.account.proxyAxios) {
             const agent = this.getAgentForProxy(this.account)
-            this.instance.defaults.httpAgent = agent
             this.instance.defaults.httpsAgent = agent
+            // Don't set httpAgent for HTTPS requests
         }
 
         axiosRetry(this.instance, {
-            retries: 5,
-            retryDelay: axiosRetry.exponentialDelay,
+            retries: 8,
+            retryDelay: (retryCount) => {
+                return Math.min(1000 * Math.pow(2, retryCount - 1), 30000);
+            },
             shouldResetTimeout: true,
-            retryCondition: error => {
-                if (axiosRetry.isNetworkError(error)) return true
-                if (!error.response) return true
+            retryCondition: (error) => {
+                // Retry on timeouts and network errors
+                if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+                    return true;
+                }
+                if (axiosRetry.isNetworkError(error)) return true;
+                if (!error.response) return true;
 
-                const status = error.response.status
-                return status === 429 || (status >= 500 && status <= 599)
+                const status = error.response.status;
+                return status === 429 || (status >= 500 && status <= 599);
             }
-        })
+        });
     }
 
     private getAgentForProxy(
@@ -79,16 +117,51 @@ class AxiosClient {
     }
 
     public async request(config: AxiosRequestConfig, bypassProxy = false): Promise<AxiosResponse> {
-        if (bypassProxy) {
-            const bypassInstance = axios.create()
-            axiosRetry(bypassInstance, {
-                retries: 3,
-                retryDelay: axiosRetry.exponentialDelay
-            })
-            return bypassInstance.request(config)
+        // Make a copy of headers to prevent modification
+        const headers = { ...config.headers };
+        const hostHeader = headers['Host'];
+        
+        // Create a new config with preserved headers
+        const finalConfig: AxiosRequestConfig = {
+            ...config,
+            headers: headers
+        };
+
+        // CRITICAL: If using proxy, we need to be extra careful with headers
+        if (this.account.url && this.account.proxyAxios && !bypassProxy) {
+            // Some proxies require the Host header to be the original domain
+            if (hostHeader) {
+                finalConfig.headers = finalConfig.headers || {};
+                finalConfig.headers['Host'] = hostHeader;
+            }
         }
 
-        return this.instance.request(config)
+        try {
+            if (bypassProxy) {
+                const bypassInstance = axios.create({
+                    timeout: 30000,
+                    transformRequest: [(data, headers) => {
+                        if (headers && hostHeader) {
+                            headers['Host'] = hostHeader;
+                        }
+                        return data;
+                    }]
+                });
+                
+                axiosRetry(bypassInstance, {
+                    retries: 5,
+                    retryDelay: axiosRetry.exponentialDelay
+                });
+                
+                return await bypassInstance.request(finalConfig);
+            }
+
+            return await this.instance.request(finalConfig);
+        } catch (error: any) {
+            // Log but don't modify error
+            console.error(`[Axios] Request failed: ${error.message}`);
+            throw error;
+        }
     }
 }
 
