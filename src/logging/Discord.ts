@@ -33,29 +33,54 @@ export async function sendDiscord(discordUrl: string, content: string, level: Lo
         url: discordUrl,
         headers,
         data: { content: truncate(content), allowed_mentions: { parse: [] } },
-        timeout: 10000
+        timeout: 20000, // INCREASED FROM 10000ms TO 20000ms
+        // Add these options to help with slow connections
+        maxContentLength: 2000,
+        maxBodyLength: 2000
     };
 
     if (originalHostname) {
         request.httpsAgent = new https.Agent({
             rejectUnauthorized: false,
-            servername: originalHostname
+            servername: originalHostname,
+            keepAlive: true, // Keep connection alive
+            timeout: 20000 // Agent timeout
         });
     }
 
     await discordQueue.add(async () => {
-        try {
-            await axios(request);
-        } catch (err: any) {
-            const status = err?.response?.status;
-            if (status === 429) {
-                return;
+        // Add retry logic with exponential backoff
+        const maxRetries = 3;
+        for (let i = 0; i < maxRetries; i++) {
+            try {
+                await axios(request);
+                return; // Success!
+            } catch (err: any) {
+                const status = err?.response?.status;
+                if (status === 429) {
+                    // Rate limited - Discord's docs say wait and retry [citation:1]
+                    const retryAfter = err?.response?.headers?.['retry-after'] || 5;
+                    await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+                    continue;
+                }
+                
+                // If it's a timeout and we have retries left, wait and retry
+                if (err.code === 'ECONNABORTED' && i < maxRetries - 1) {
+                    console.log(`[Discord] Timeout, retrying (${i + 1}/${maxRetries})...`);
+                    await new Promise(resolve => setTimeout(resolve, 2000 * (i + 1))); // Exponential backoff
+                    continue;
+                }
+                
+                // Other errors - log but don't retry
+                if (i === maxRetries - 1 || (status && status !== 429)) {
+                    console.error('[Discord] Failed to send webhook:', {
+                        status,
+                        message: err?.message,
+                        code: err?.code,
+                        url: discordUrl.substring(0, 50) + '...'
+                    });
+                }
             }
-            console.error('[Discord] Failed to send webhook:', {
-                status,
-                message: err?.message,
-                url: discordUrl.substring(0, 50) + '...'
-            });
         }
     });
 }
