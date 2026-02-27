@@ -49,23 +49,31 @@ async function preResolveHosts() {
 const originalConnect = net.Socket.prototype.connect;
 const originalLookup = dns.lookup;
 
-// 2. Helper to get IP for host - FIX: Return type is string | null
+// 2. Helper to get IP for host - FIX: Return type is string | null with proper undefined checks
 function getIPForHost(host: string): string | null {
     // Check cache first
     for (const [domain, ips] of ipCache.entries()) {
         if (host === domain || host.endsWith(`.${domain}`)) {
-            return ips[0]; // Return first IP
+            const ip = ips[0];
+            // FIX: Check if ip is not undefined
+            if (ip !== undefined) {
+                return ip;
+            }
         }
     }
     
     // Check hardcoded IPs as fallback
     for (const [domain, ips] of Object.entries(HARDCODED_IPS)) {
         if (host === domain || host.endsWith(`.${domain}`)) {
-            return ips[0];
+            const ip = ips[0];
+            // FIX: Check if ip is not undefined
+            if (ip !== undefined) {
+                return ip;
+            }
         }
     }
     
-    return null; // Return null, not undefined
+    return null; // Return null if no IP found
 }
 
 // 3. Patch net.Socket.connect (LOWEST LEVEL)
@@ -77,7 +85,7 @@ net.Socket.prototype.connect = function(this: any, ...args: any[]) {
         
         if (host && typeof host === 'string') {
             const ip = getIPForHost(host);
-            if (ip !== null) { // Check for null, not undefined
+            if (ip !== null) { // Check for null
                 console.log(`[SOCKET-FIX] 🔄 Rewriting connection: ${host} -> ${ip}`);
                 
                 // Store original host for TLS SNI
@@ -97,7 +105,7 @@ net.Socket.prototype.connect = function(this: any, ...args: any[]) {
 (dns as any).lookup = function(hostname: string, options: any, callback?: any) {
     const ip = getIPForHost(hostname);
     
-    if (ip !== null) { // Check for null, not undefined
+    if (ip !== null) { // Check for null
         console.log(`[SOCKET-FIX] DNS lookup: ${hostname} -> ${ip}`);
         
         // Handle callback-only case
