@@ -72,30 +72,67 @@ net.Socket.prototype.connect = function(this: any, ...args: any[]) {
         }
     }
     
-    return originalConnect.apply(this, args as any);
+    return originalConnect.apply(this, args as [any]);
 };
 
 // ===== LAYER 2: Patch tls.connect for SSL connections =====
 const originalTLSConnect = tls.connect;
 
-(tls as any).connect = function(...args: any[]) {
-    const options = args[0];
-    
-    if (options && typeof options === 'object') {
+// @ts-ignore - Ignore TypeScript overload issues
+tls.connect = function(...args: any[]): any {
+    // Handle different signature patterns
+    if (args.length === 1 && typeof args[0] === 'object') {
+        // tls.connect(options)
+        const options = { ...args[0] };
         const host = options.host || options.servername;
         
         if (host && typeof host === 'string') {
             for (const [domain, ip] of Object.entries(IP_MAP)) {
                 if (host === domain || host.endsWith(`.${domain}`)) {
-                    if (options.host) options.host = ip;
-                    if (options.servername) options.servername = host; // Keep for SNI
+                    options.host = ip;
+                    options.servername = host; // Keep for SNI
                     break;
                 }
             }
         }
+        return originalTLSConnect(options);
+    } 
+    else if (args.length >= 2 && typeof args[0] === 'number' && typeof args[1] === 'string') {
+        // tls.connect(port, host, ...)
+        const port = args[0];
+        let host = args[1];
+        const rest = args.slice(2);
+        
+        for (const [domain, ip] of Object.entries(IP_MAP)) {
+            if (host === domain || host.endsWith(`.${domain}`)) {
+                host = ip;
+                break;
+            }
+        }
+        
+        return originalTLSConnect(port, host, ...rest);
+    }
+    else if (args.length >= 1 && typeof args[0] === 'number') {
+        // tls.connect(port, ...)
+        const port = args[0];
+        const rest = args.slice(1);
+        
+        // Check if next arg is host string
+        if (rest.length > 0 && typeof rest[0] === 'string') {
+            let host = rest[0];
+            for (const [domain, ip] of Object.entries(IP_MAP)) {
+                if (host === domain || host.endsWith(`.${domain}`)) {
+                    rest[0] = ip;
+                    break;
+                }
+            }
+        }
+        
+        return originalTLSConnect(port, ...rest);
     }
     
-    return originalTLSConnect.apply(this, args);
+    // Default fallback
+    return originalTLSConnect(...args as any);
 };
 
 // ===== LAYER 3: Patch dns.lookup =====
@@ -108,7 +145,7 @@ const originalLookup = dns.lookup;
             // Handle callback-only case
             if (typeof options === 'function') {
                 options(null, ip, 4);
-                return;
+                return {} as any;
             }
             
             // Handle options+callback case
@@ -118,13 +155,11 @@ const originalLookup = dns.lookup;
                 } else {
                     callback(null, ip, 4);
                 }
-                return;
+                return {} as any;
             }
             
             // Handle promise case
-            return {
-                then: (resolve: Function) => resolve({ address: ip, family: 4 })
-            };
+            return Promise.resolve({ address: ip, family: 4 });
         }
     }
     
@@ -149,11 +184,11 @@ const originalResolve4 = dns.resolve4;
         if (hostname === domain || hostname.endsWith(`.${domain}`)) {
             if (typeof options === 'function') {
                 options(null, [ip]);
-                return;
+                return {} as any;
             }
             if (typeof callback === 'function') {
                 callback(null, [ip]);
-                return;
+                return {} as any;
             }
             return Promise.resolve([ip]);
         }
