@@ -5,6 +5,25 @@ echo "========================================="
 echo "🚀 STARTING WITH NETWORK FIXES"
 echo "========================================="
 
+
+# Show current directory contents for debugging
+echo "📋 Current directory contents:"
+ls -la /home/user/app/
+echo "📋 Dist directory contents:"
+ls -la /home/user/app/dist/ || echo "dist directory not found"
+
+# Check if net-patch.js exists
+if [ -f /home/user/app/net-patch.js ]; then
+    echo "✅ net-patch.js found in app root"
+    # Copy to dist if needed
+    cp /home/user/app/net-patch.js /home/user/app/dist/net-patch.js 2>/dev/null || true
+elif [ -f /home/user/app/dist/net-patch.js ]; then
+    echo "✅ net-patch.js found in dist directory"
+else
+    echo "❌ net-patch.js not found!"
+fi
+
+
 # Show current DNS configuration
 echo "📋 DNS configuration:"
 cat /etc/resolv.conf

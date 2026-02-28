@@ -1,4 +1,4 @@
-// ===== NETWORK PATCH - PRELOAD SCRIPT (JavaScript) =====
+// ===== NETWORK PATCH - PRELOAD SCRIPT =====
 // This file must be loaded FIRST via NODE_OPTIONS
 const net = require('net');
 const dns = require('dns');
@@ -74,13 +74,16 @@ net.Socket.prototype.connect = function(...args) {
 const originalLookup = dns.lookup;
 
 dns.lookup = function(hostname, options, callback) {
+    // Check if this domain is in our map
     for (const [domain, ip] of Object.entries(IP_MAP)) {
         if (hostname === domain || hostname.endsWith(`.${domain}`)) {
+            // Handle callback-only case
             if (typeof options === 'function') {
                 options(null, ip, 4);
                 return;
             }
             
+            // Handle options+callback case
             if (typeof callback === 'function') {
                 if (options && options.all) {
                     callback(null, [{ address: ip, family: 4 }]);
@@ -90,10 +93,12 @@ dns.lookup = function(hostname, options, callback) {
                 return;
             }
             
+            // Handle promise case
             return Promise.resolve({ address: ip, family: 4 });
         }
     }
     
+    // Force IPv4 for all other domains
     const opts = typeof options === 'object' ? { ...options, family: 4 } : { family: 4 };
     
     if (typeof options === 'function') {

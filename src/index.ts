@@ -3,9 +3,6 @@ import dns from 'dns';
 dns.setServers(['8.8.8.8', '8.8.4.4']);
 dns.setDefaultResultOrder('ipv4first');
 
-// Then import net-patch (which should be .js)
-import './dist/net-patch.js';
-
 import { AsyncLocalStorage } from 'node:async_hooks'
 import cluster, { Worker } from 'cluster'
 import type { BrowserContext, Cookie, Page } from 'patchright'
