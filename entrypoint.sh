@@ -132,17 +132,17 @@ if [ -n "$TOKEN" ]; then
         -H "Content-Type: application/json" \
         -d "$TEST_PAYLOAD" \
         "$TOKEN" \
-        -o /tmp/discord_response.txt \
+        -o /home/user/app/discord_response.txt \
         -w "%{http_code}" \
-        > /tmp/discord_status.txt 2>&1
+        > /home/user/app/discord_status.txt 2>&1
     
-    DISCORD_STATUS=$(cat /tmp/discord_status.txt)
+    DISCORD_STATUS=$(cat /home/user/app/discord_status.txt)
     
     if [ "$DISCORD_STATUS" = "204" ]; then
         echo "✅ Discord webhook sent successfully (Status: 204)"
     else
         echo "⚠️ Discord webhook returned status: $DISCORD_STATUS"
-        echo "Response: $(cat /tmp/discord_response.txt 2>/dev/null || echo 'No response')"
+        echo "Response: $(cat /home/user/app/discord_response.txt 2>/dev/null || echo 'No response')"
         
         # Fallback test with discordapp.com (bypass)
         echo "📡 Retrying with discordapp.com bypass..."
@@ -152,11 +152,11 @@ if [ -n "$TOKEN" ]; then
             -H "Content-Type: application/json" \
             -d "$TEST_PAYLOAD" \
             "$FALLBACK_URL" \
-            -o /tmp/discord_fallback.txt \
+            -o /home/user/app/discord_fallback.txt \
             -w "%{http_code}" \
-            > /tmp/discord_fallback_status.txt
+            > /home/user/app/discord_fallback_status.txt
         
-        FALLBACK_STATUS=$(cat /tmp/discord_fallback_status.txt)
+        FALLBACK_STATUS=$(cat /home/user/app/discord_fallback_status.txt)
         
         if [ "$FALLBACK_STATUS" = "204" ]; then
             echo "✅ Discord webhook sent via discordapp.com (Status: 204)"
@@ -166,7 +166,7 @@ if [ -n "$TOKEN" ]; then
     fi
     
     # Clean up temp files
-    rm -f /tmp/discord_response.txt /tmp/discord_status.txt /tmp/discord_fallback.txt /tmp/discord_fallback_status.txt
+    rm -f /home/user/app/discord_response.txt /home/user/app/discord_status.txt /home/user/app/discord_fallback.txt /home/user/app/discord_fallback_status.txt
 else
     echo "⚠️ TOKEN secret not found - skipping webhook test"
     echo "   To enable Discord notifications, add TOKEN to your Space secrets"
