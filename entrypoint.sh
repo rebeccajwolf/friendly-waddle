@@ -6,6 +6,39 @@ echo "========================================="
 echo "🚀 STARTING WITH NETWORK FIXES"
 echo "========================================="
 
+# ===== ADD HOSTS ENTRIES AT RUNTIME =====
+echo "📝 Adding hosts entries to /etc/hosts..."
+
+# Check if we can write to /etc/hosts
+if [ -w /etc/hosts ]; then
+    # Microsoft domains
+    echo "150.171.30.10 rewards.bing.com" >> /etc/hosts
+    echo "150.171.30.10 www.bing.com" >> /etc/hosts
+    echo "150.171.30.10 account.microsoft.com" >> /etc/hosts
+    echo "13.107.213.40 prod.rewardsplatform.microsoft.com" >> /etc/hosts
+    echo "13.107.213.40 login.live.com" >> /etc/hosts
+    
+    # Bing API domains
+    echo "2.18.67.162 www.bingapis.com" >> /etc/hosts
+    echo "2.18.67.162 api.bing.com" >> /etc/hosts
+    
+    # Discord domains
+    echo "162.159.135.232 discord.com" >> /etc/hosts
+    echo "162.159.135.232 gateway.discord.gg" >> /etc/hosts
+    echo "162.159.135.232 cdn.discordapp.com" >> /etc/hosts
+    echo "162.159.135.232 discordapp.com" >> /etc/hosts
+    
+    # Other services
+    echo "142.250.185.46 trends.google.com" >> /etc/hosts
+    echo "198.35.26.96 wikimedia.org" >> /etc/hosts
+    echo "151.101.1.140 www.reddit.com" >> /etc/hosts
+    echo "185.199.108.133 raw.githubusercontent.com" >> /etc/hosts
+    
+    echo "✅ Hosts entries added successfully"
+else
+    echo "⚠️ Cannot write to /etc/hosts, continuing without hosts entries"
+fi
+
 # Show network configuration
 echo "📋 /etc/hosts entries:"
 cat /etc/hosts | grep -E "bing|discord|google|reddit" || echo "No custom hosts found"
