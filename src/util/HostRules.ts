@@ -100,7 +100,7 @@ export class HostRulesManager {
     // Legacy method for backward compatibility
     public getHostMapping(hostname: string): string | undefined {
         const ips = this.getCurrentIP(hostname);
-        return ips; // Returns first IP for backward compatibility
+        return ips; // Returns IP for backward compatibility
     }
 
     private findMatchingDomain(hostname: string): string | null {
@@ -194,11 +194,16 @@ export class HostRulesManager {
             // Fallback: extract hostname from URL
             try {
                 const hostname = new URL(urlResult.url).hostname;
-                if (hostname) {
+                if (hostname && typeof hostname === 'string') {
                     headers['Host'] = hostname;
                 }
             } catch {
                 // Ignore if URL parsing fails
+                // Try manual extraction as last resort
+                const match = urlResult.url.match(/https?:\/\/([^\/]+)/);
+                if (match && match[1]) {
+                    headers['Host'] = match[1];
+                }
             }
         }
 
