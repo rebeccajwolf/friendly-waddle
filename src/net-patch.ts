@@ -132,7 +132,7 @@ tls.connect = function(...args: any[]): any {
     }
     
     // Default fallback
-    return originalTLSConnect(...args as any);
+    return originalTLSConnect(...args as [any]);
 };
 
 // ===== LAYER 3: Patch dns.lookup =====
@@ -172,6 +172,7 @@ const originalLookup = dns.lookup;
     if (typeof callback === 'function') {
         return originalLookup(hostname, opts, callback);
     }
+    // FIX: Don't use spread operator, call directly with two arguments
     return originalLookup(hostname, opts);
 };
 
