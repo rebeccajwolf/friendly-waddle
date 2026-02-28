@@ -5,7 +5,7 @@ import { HttpsProxyAgent } from 'https-proxy-agent'
 import { SocksProxyAgent } from 'socks-proxy-agent'
 import https from 'https'
 import { URL } from 'url'
-import type { AccountProxy } from '../interface/account'
+import type { AccountProxy } from '../interface/Account' // Fixed import path (capital A)
 import { HostRulesManager } from './HostRules'
 import type { MicrosoftRewardsBot } from '../index'
 
@@ -16,12 +16,10 @@ const failedDomains: Map<string, number> = new Map();
 class AxiosClient {
     private instance: AxiosInstance
     private account: AccountProxy
-    private bot?: MicrosoftRewardsBot
     private hostRules?: HostRulesManager
 
     constructor(account: AccountProxy, bot?: MicrosoftRewardsBot) {
         this.account = account
-        this.bot = bot
         
         if (bot) {
             this.hostRules = new HostRulesManager(bot)
@@ -59,9 +57,9 @@ class AxiosClient {
         }
 
         axiosRetry(this.instance, {
-            retries: 5, // Increased to allow more IP switches
+            retries: 5,
             retryDelay: (retryCount) => {
-                return 2000 * retryCount; // Simple backoff: 2s, 4s, 6s, 8s, 10s
+                return 2000 * retryCount;
             },
             shouldResetTimeout: true,
             retryCondition: (error) => {
@@ -92,13 +90,12 @@ class AxiosClient {
                         }
                     }
                     
-                    return true; // Retry with new IP
+                    return true;
                 }
                 
                 if (axiosRetry.isNetworkError(error)) {
                     console.log(`[Axios] 🌐 Network error for ${host}: ${error.message}`);
                     
-                    // Also report network errors to switch IP
                     if (host && this.hostRules) {
                         this.hostRules.reportFailure(host);
                     }
@@ -108,7 +105,6 @@ class AxiosClient {
                 if (!error.response) {
                     console.log(`[Axios] ❌ No response for ${host}`);
                     
-                    // Report no response to switch IP
                     if (host && this.hostRules) {
                         this.hostRules.reportFailure(host);
                     }
@@ -130,7 +126,6 @@ class AxiosClient {
             if (host && ip !== 'unknown') {
                 console.log(`[Axios] ✅ Success for ${host} using IP ${ip}`);
                 
-                // Reset failure count on success
                 if (failedDomains.has(host)) {
                     failedDomains.delete(host);
                 }
@@ -197,12 +192,10 @@ class AxiosClient {
         }
     }
     
-    // Helper method to get current IP for a domain
     public getCurrentIP(hostname: string): string | undefined {
         return this.hostRules?.getCurrentIP(hostname);
     }
     
-    // Helper method to manually switch IP for a domain
     public switchIP(hostname: string): void {
         if (this.hostRules) {
             this.hostRules.reportFailure(hostname);

@@ -16,7 +16,7 @@ export class HostRulesManager {
     }
 
     private initializeHostRules(): void {
-        // Multiple IPs for each domain (from your DNS resolutions)
+        // Multiple IPs for each domain
         this.hostRules.set('rewards.bing.com', [
             '150.171.30.10',
             '150.171.29.10', 
@@ -71,8 +71,8 @@ export class HostRulesManager {
         this.hostRules.set('raw.githubusercontent.com', ['185.199.108.133'])
     }
 
-    // Track failed IPs to try next one
-    public reportFailure(hostname: string) {
+    // Report failure to switch to next IP
+    public reportFailure(hostname: string): void {
         const domain = this.findMatchingDomain(hostname);
         if (domain) {
             const currentIndex = this.currentIpIndex.get(domain) || 0;
@@ -84,6 +84,23 @@ export class HostRulesManager {
             
             console.log(`[HOST-RULES] ${domain} failed, switching to IP ${ips[nextIndex]}`);
         }
+    }
+
+    // Get current IP for a domain
+    public getCurrentIP(hostname: string): string | undefined {
+        const domain = this.findMatchingDomain(hostname);
+        if (domain) {
+            const ips = this.hostRules.get(domain) || [];
+            const currentIndex = this.currentIpIndex.get(domain) || 0;
+            return ips[currentIndex];
+        }
+        return undefined;
+    }
+
+    // Legacy method for backward compatibility
+    public getHostMapping(hostname: string): string | undefined {
+        const ips = this.getCurrentIP(hostname);
+        return ips; // Returns first IP for backward compatibility
     }
 
     private findMatchingDomain(hostname: string): string | null {
@@ -108,7 +125,6 @@ export class HostRulesManager {
             const urlObj = new URL(url)
             const hostname = urlObj.hostname
             let originalHostname: string | undefined = hostname
-            let modified = false
             let mappedHost = hostname
 
             // Find matching domain
@@ -130,7 +146,6 @@ export class HostRulesManager {
                         } else {
                             urlObj.hostname = mappedHost
                         }
-                        modified = true
                         
                         this.bot.logger.debug(this.bot.isMobile, 'HOST-RULES', 
                             `Modified: ${hostname} -> ${mappedHost} (${currentIndex + 1}/${ips.length})`)
@@ -153,7 +168,12 @@ export class HostRulesManager {
                 'HOST-RULES',
                 `Failed to parse URL ${url}: ${error instanceof Error ? error.message : String(error)}`
             )
-            return { url, originalHostname: new URL(url).hostname }
+            // Fix: Ensure we return a string for originalHostname
+            try {
+                return { url, originalHostname: new URL(url).hostname }
+            } catch {
+                return { url, originalHostname: url.split('/')[2] || 'unknown' }
+            }
         }
     }
 
@@ -168,15 +188,5 @@ export class HostRulesManager {
         }
 
         return headers
-    }
-
-    getCurrentIP(hostname: string): string | undefined {
-        const domain = this.findMatchingDomain(hostname);
-        if (domain) {
-            const ips = this.hostRules.get(domain) || [];
-            const currentIndex = this.currentIpIndex.get(domain) || 0;
-            return ips[currentIndex];
-        }
-        return undefined;
     }
 }
