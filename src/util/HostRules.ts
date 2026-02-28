@@ -15,15 +15,15 @@ export class HostRulesManager {
     }
 
     private initializeHostRules(): void {
-        // Only keep domains that absolutely need IP mapping
-        // Let the DNS fix handle Microsoft domains dynamically
+        // With /etc/hosts and net-patch, we don't need most mappings
+        // Keep only for domains not covered by the patch
         this.hostRules.set('trends.google.com', '142.250.185.46')
-        this.hostRules.set('www.bingapis.com', '150.171.73.13')
-        this.hostRules.set('api.bing.com', '150.171.73.13')
         this.hostRules.set('wikimedia.org', '198.35.26.96')
         this.hostRules.set('www.reddit.com', '151.101.1.140')
         this.hostRules.set('raw.githubusercontent.com', '185.199.108.133')
-        // Microsoft domains removed - let DNS fix handle them
+        
+        // Microsoft domains are handled by net-patch and /etc/hosts
+        // No need to add them here
     }
 
     private isIPv6(host: string): boolean {
@@ -41,8 +41,10 @@ export class HostRulesManager {
             let originalHostname: string | undefined
             let modified = false
 
-            // Skip Microsoft domains - let DNS fix handle them
-            if (hostname.includes('bing.com') || hostname.includes('microsoft.com')) {
+            // Skip Microsoft domains - handled by net-patch
+            if (hostname.includes('bing.com') || 
+                hostname.includes('microsoft.com') || 
+                hostname.includes('live.com')) {
                 return { url };
             }
 
