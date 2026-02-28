@@ -1,8 +1,3 @@
-// Force Google DNS at the application level
-import dns from 'dns';
-dns.setServers(['8.8.8.8', '8.8.4.4']);
-dns.setDefaultResultOrder('ipv4first');
-
 import { AsyncLocalStorage } from 'node:async_hooks'
 import cluster, { Worker } from 'cluster'
 import type { BrowserContext, Cookie, Page } from 'patchright'
@@ -301,7 +296,7 @@ export class MicrosoftRewardsBot {
                     `Starting account: ${accountEmail} | geoLocale: ${account.geoLocale}`
                 )
 
-                this.axios = new AxiosClient(account.proxy, this)
+                this.axios = new AxiosClient(account.proxy)
 
                 const result: { initialPoints: number; collectedPoints: number } | undefined = await this.Main(
                     account

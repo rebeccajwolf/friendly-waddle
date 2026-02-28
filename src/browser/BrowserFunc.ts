@@ -43,9 +43,7 @@ export default class BrowserFunc {
                 },
                 urlResult
             )
-            
-            this.bot.logger.debug(this.bot.isMobile, 'HOST-RULES', `Request to ${urlResult.url} with Host: ${headers['Host']}`);
-            
+
             const request: AxiosRequestConfig = {
                 url: urlResult.url,
                 method: 'GET',
