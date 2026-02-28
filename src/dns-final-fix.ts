@@ -19,20 +19,24 @@ const resolutionCache: Map<string, string> = new Map();
 // Track failed domains to avoid retrying bad IPs
 const failedDomains: Set<string> = new Set();
 
-// Helper to resolve with Google DNS
+// Helper to resolve with Google DNS - FIXED TYPE ISSUES
 async function resolveWithGoogle(host: string): Promise<string | null> {
     try {
         const addresses = await googleResolver.resolve4(host);
+        // FIX: Check if addresses exists and has length
         if (addresses && addresses.length > 0) {
             const ip = addresses[0];
-            console.log(`[DNS-FIX] ✅ Google resolved ${host} -> ${ip}`);
-            resolutionCache.set(host, ip);
-            return ip;
+            // FIX: Check if ip is not undefined
+            if (ip !== undefined) {
+                console.log(`[DNS-FIX] ✅ Google resolved ${host} -> ${ip}`);
+                resolutionCache.set(host, ip);
+                return ip;
+            }
         }
     } catch (err) {
         console.log(`[DNS-FIX] ⚠️ Google DNS failed for ${host}`);
     }
-    return null;
+    return null; // Return null, not undefined
 }
 
 // Patch net.Socket.connect - ONLY use cache as last resort
@@ -52,7 +56,7 @@ net.Socket.prototype.connect = function(this: any, ...args: any[]) {
             if (failedDomains.has(host)) {
                 // Use cached IP as last resort
                 const cachedIp = resolutionCache.get(host);
-                if (cachedIp) {
+                if (cachedIp !== undefined) { // Check for undefined
                     console.log(`[DNS-FIX] 🔄 Using cached IP for ${host}: ${cachedIp}`);
                     this._originalServername = host;
                     options.host = cachedIp;
@@ -79,7 +83,7 @@ const originalLookup = dns.lookup;
         
         // Try Google DNS first
         resolveWithGoogle(hostname).then(ip => {
-            if (ip) {
+            if (ip !== null) { // Check for null
                 cb(null, ip, 4);
             } else {
                 // Fall back to system DNS
@@ -94,7 +98,7 @@ const originalLookup = dns.lookup;
     // Handle options+callback case
     if (typeof callback === 'function') {
         resolveWithGoogle(hostname).then(ip => {
-            if (ip) {
+            if (ip !== null) { // Check for null
                 if (options && options.all) {
                     callback(null, [{ address: ip, family: 4 }]);
                 } else {
@@ -121,7 +125,7 @@ const originalResolve4 = dns.resolve4;
     if (typeof options === 'function') {
         const cb = options;
         resolveWithGoogle(hostname).then(ip => {
-            if (ip) {
+            if (ip !== null) { // Check for null
                 cb(null, [ip]);
             } else {
                 originalResolve4(hostname, cb);
@@ -134,7 +138,7 @@ const originalResolve4 = dns.resolve4;
     
     if (typeof callback === 'function') {
         resolveWithGoogle(hostname).then(ip => {
-            if (ip) {
+            if (ip !== null) { // Check for null
                 callback(null, [ip]);
             } else {
                 originalResolve4(hostname, options, callback);
@@ -161,7 +165,7 @@ async function preResolve() {
     
     for (const domain of domains) {
         const ip = await resolveWithGoogle(domain);
-        if (!ip) {
+        if (ip === null) { // Check for null
             console.log(`[DNS-FIX] ⚠️ Adding ${domain} to failure list`);
             failedDomains.add(domain);
         }
