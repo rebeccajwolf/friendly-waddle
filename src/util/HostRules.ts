@@ -170,9 +170,13 @@ export class HostRulesManager {
             )
             // Fix: Ensure we return a string for originalHostname
             try {
-                return { url, originalHostname: new URL(url).hostname }
+                const hostname = new URL(url).hostname;
+                return { url, originalHostname: hostname }
             } catch {
-                return { url, originalHostname: url.split('/')[2] || 'unknown' }
+                // If URL parsing fails, extract hostname manually
+                const match = url.match(/https?:\/\/([^\/]+)/);
+                const hostname = match ? match[1] : 'unknown';
+                return { url, originalHostname: hostname }
             }
         }
     }
@@ -183,8 +187,19 @@ export class HostRulesManager {
             ...additionalHeaders
         }
 
-        if (urlResult.originalHostname) {
-            headers['Host'] = urlResult.originalHostname
+        // FIX: Only set Host header if originalHostname exists and is a string
+        if (urlResult.originalHostname && typeof urlResult.originalHostname === 'string') {
+            headers['Host'] = urlResult.originalHostname;
+        } else if (urlResult.url) {
+            // Fallback: extract hostname from URL
+            try {
+                const hostname = new URL(urlResult.url).hostname;
+                if (hostname) {
+                    headers['Host'] = hostname;
+                }
+            } catch {
+                // Ignore if URL parsing fails
+            }
         }
 
         return headers
