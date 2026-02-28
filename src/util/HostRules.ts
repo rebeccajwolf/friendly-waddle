@@ -15,15 +15,22 @@ export class HostRulesManager {
     }
 
     private initializeHostRules(): void {
-        // With /etc/hosts and net-patch, we don't need most mappings
-        // Keep only for domains not covered by the patch
+        // Keep all domains - net-patch handles resolution but we still need Host headers
+        this.hostRules.set('rewards.bing.com', '150.171.30.10')
+        this.hostRules.set('www.bing.com', '2.18.67.162')
+        this.hostRules.set('account.microsoft.com', '150.171.30.10')
+        this.hostRules.set('prod.rewardsplatform.microsoft.com', '13.107.213.40')
+        this.hostRules.set('login.live.com', '13.107.213.40')
+        this.hostRules.set('www.bingapis.com', '2.18.67.162')
+        this.hostRules.set('api.bing.com', '2.18.67.162')
+        this.hostRules.set('discord.com', '162.159.135.232')
+        this.hostRules.set('gateway.discord.gg', '162.159.135.232')
+        this.hostRules.set('cdn.discordapp.com', '162.159.135.232')
+        this.hostRules.set('discordapp.com', '162.159.135.232')
         this.hostRules.set('trends.google.com', '142.250.185.46')
         this.hostRules.set('wikimedia.org', '198.35.26.96')
         this.hostRules.set('www.reddit.com', '151.101.1.140')
         this.hostRules.set('raw.githubusercontent.com', '185.199.108.133')
-        
-        // Microsoft domains are handled by net-patch and /etc/hosts
-        // No need to add them here
     }
 
     private isIPv6(host: string): boolean {
@@ -38,22 +45,16 @@ export class HostRulesManager {
         try {
             const urlObj = new URL(url)
             const hostname = urlObj.hostname
-            let originalHostname: string | undefined
+            let originalHostname: string | undefined = hostname // Default to current hostname
             let modified = false
 
-            // Skip Microsoft domains - handled by net-patch
-            if (hostname.includes('bing.com') || 
-                hostname.includes('microsoft.com') || 
-                hostname.includes('live.com')) {
-                return { url };
-            }
-
+            // Try to find a matching domain in our rules
             for (const [originalDomain, mappedHost] of this.hostRules.entries()) {
                 const isMatch = hostname === originalDomain || hostname.endsWith(`.${originalDomain}`)
 
                 if (isMatch) {
-                    originalHostname = hostname
-
+                    originalHostname = originalDomain // Store the original domain for Host header
+                    
                     try {
                         if (this.isIPv6(mappedHost)) {
                             urlObj.hostname = `[${mappedHost}]`
@@ -74,16 +75,20 @@ export class HostRulesManager {
 
             const finalUrl = urlObj.toString()
             if (modified) {
-                this.bot.logger.debug(this.bot.isMobile, 'HOST-RULES', `Modified URL: ${finalUrl}`)
+                this.bot.logger.debug(this.bot.isMobile, 'HOST-RULES', 
+                    `Modified: ${hostname} -> ${urlObj.hostname} (Host: ${originalHostname})`)
             }
+            
+            // Always return originalHostname (even for non-modified domains)
             return { url: finalUrl, originalHostname }
+            
         } catch (error) {
             this.bot.logger.error(
                 this.bot.isMobile,
                 'HOST-RULES',
                 `Failed to parse URL ${url}: ${error instanceof Error ? error.message : String(error)}`
             )
-            return { url }
+            return { url, originalHostname: new URL(url).hostname }
         }
     }
 
@@ -93,8 +98,11 @@ export class HostRulesManager {
             ...additionalHeaders
         }
 
+        // CRITICAL: Always set Host header if we have originalHostname
         if (urlResult.originalHostname) {
             headers['Host'] = urlResult.originalHostname
+            // Debug log
+            console.log(`[HOST-RULES] Setting Host header: ${urlResult.originalHostname}`);
         }
 
         return headers
