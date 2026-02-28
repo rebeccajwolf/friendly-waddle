@@ -170,7 +170,7 @@ export class HostRulesManager {
     }
 
     buildHeaders(baseHeaders: any, urlResult: HostRuleResult, additionalHeaders?: any): any {
-        const headers: any = {
+        const headers: Record<string, any> = {
             ...baseHeaders,
             ...additionalHeaders
         };
@@ -186,9 +186,9 @@ export class HostRulesManager {
             }
         }
 
-        // FIX: Use type assertion to tell TypeScript this is safe
+        // FIX: Use non-null assertion operator since we checked hostValue above
         if (hostValue) {
-            headers['Host'] = hostValue as string;
+            headers['Host'] = hostValue!;
         }
 
         return headers;
