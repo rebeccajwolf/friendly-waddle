@@ -7,6 +7,10 @@ import https from 'https'
 import { URL } from 'url'
 import type { AccountProxy } from '../interface/Account'
 
+// Track failed IPs globally
+const failedIPs: Set<string> = new Set();
+const failedDomains: Map<string, number> = new Map();
+
 class AxiosClient {
     private instance: AxiosInstance
     private account: AccountProxy
@@ -26,7 +30,16 @@ class AxiosClient {
         this.instance.interceptors.request.use((config) => {
             if (config.headers && config.headers['Host']) {
                 const hostHeader = config.headers['Host'] as string;
-                console.log(`[Axios] Request to ${config.url} with Host: ${hostHeader}`);
+                const url = config.url || '';
+                const ipMatch = url.match(/\d+\.\d+\.\d+\.\d+/);
+                const ip = ipMatch ? ipMatch[0] : 'unknown';
+                
+                console.log(`[Axios] 📤 Request to ${hostHeader} (${ip})`);
+                
+                // Check if this IP has failed before
+                if (failedIPs.has(ip)) {
+                    console.log(`[Axios] ⚠️ This IP ${ip} has failed before, consider updating cache`);
+                }
             }
             return config;
         });
@@ -37,16 +50,46 @@ class AxiosClient {
         }
 
         axiosRetry(this.instance, {
-            retries: 5,
-            retryDelay: axiosRetry.exponentialDelay,
+            retries: 3, // Reduced from 8 to fail faster
+            retryDelay: (retryCount) => {
+                return 2000 * retryCount; // Simple backoff: 2s, 4s, 6s
+            },
             shouldResetTimeout: true,
             retryCondition: (error) => {
+                // Extract host and IP for tracking
+                const host = error?.config?.headers?.['Host'];
+                const url = error?.config?.url || '';
+                const ipMatch = url.match(/\d+\.\d+\.\d+\.\d+/);
+                const ip = ipMatch ? ipMatch[0] : 'unknown';
+                
                 if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
-                    console.log(`[Axios] Timeout detected, retrying...`);
+                    console.log(`[Axios] ⏱️ Timeout for ${host} at IP ${ip}`);
+                    
+                    // Track failed IP
+                    if (ip !== 'unknown') {
+                        failedIPs.add(ip);
+                    }
+                    
+                    // Track failed domain
+                    if (host) {
+                        const failCount = failedDomains.get(host) || 0;
+                        failedDomains.set(host, failCount + 1);
+                        console.log(`[Axios] 📊 ${host} has failed ${failCount + 1} times`);
+                    }
+                    
+                    return true; // Retry
+                }
+                
+                if (axiosRetry.isNetworkError(error)) {
+                    console.log(`[Axios] 🌐 Network error for ${host}: ${error.message}`);
                     return true;
                 }
-                if (axiosRetry.isNetworkError(error)) return true;
-                if (!error.response) return true;
+                
+                if (!error.response) {
+                    console.log(`[Axios] ❌ No response for ${host}`);
+                    return true;
+                }
+                
                 const status = error.response.status;
                 return status === 429 || (status >= 500 && status <= 599);
             }
@@ -105,10 +148,10 @@ class AxiosClient {
             }
             return await this.instance.request(config);
         } catch (error: any) {
-            console.error(`[Axios] Request failed: ${error.message}`);
+            console.error(`[Axios] ❌ Request failed: ${error.message}`);
             throw error;
         }
     }
 }
 
-export default AxiosClient
+export default AxiosClient;

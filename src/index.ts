@@ -1,4 +1,4 @@
-import './socket-fix';
+import './dns-final-fix';
 
 import { AsyncLocalStorage } from 'node:async_hooks'
 import cluster, { Worker } from 'cluster'
