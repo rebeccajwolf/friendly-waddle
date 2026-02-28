@@ -5,7 +5,9 @@ import { HttpsProxyAgent } from 'https-proxy-agent'
 import { SocksProxyAgent } from 'socks-proxy-agent'
 import https from 'https'
 import { URL } from 'url'
-import type { AccountProxy } from '../interface/Account'
+import type { AccountProxy } from '../interface/account'
+import { HostRulesManager } from './HostRules'
+import type { MicrosoftRewardsBot } from '../index'
 
 // Track failed IPs globally
 const failedIPs: Set<string> = new Set();
@@ -14,9 +16,16 @@ const failedDomains: Map<string, number> = new Map();
 class AxiosClient {
     private instance: AxiosInstance
     private account: AccountProxy
+    private bot?: MicrosoftRewardsBot
+    private hostRules?: HostRulesManager
 
-    constructor(account: AccountProxy) {
+    constructor(account: AccountProxy, bot?: MicrosoftRewardsBot) {
         this.account = account
+        this.bot = bot
+        
+        if (bot) {
+            this.hostRules = new HostRulesManager(bot)
+        }
 
         this.instance = axios.create({
             timeout: 30000,
@@ -38,7 +47,7 @@ class AxiosClient {
                 
                 // Check if this IP has failed before
                 if (failedIPs.has(ip)) {
-                    console.log(`[Axios] ⚠️ This IP ${ip} has failed before, consider updating cache`);
+                    console.log(`[Axios] ⚠️ This IP ${ip} has failed before, trying next IP...`);
                 }
             }
             return config;
@@ -50,14 +59,14 @@ class AxiosClient {
         }
 
         axiosRetry(this.instance, {
-            retries: 3, // Reduced from 8 to fail faster
+            retries: 5, // Increased to allow more IP switches
             retryDelay: (retryCount) => {
-                return 2000 * retryCount; // Simple backoff: 2s, 4s, 6s
+                return 2000 * retryCount; // Simple backoff: 2s, 4s, 6s, 8s, 10s
             },
             shouldResetTimeout: true,
             retryCondition: (error) => {
                 // Extract host and IP for tracking
-                const host = error?.config?.headers?.['Host'];
+                const host = error?.config?.headers?.['Host'] as string | undefined;
                 const url = error?.config?.url || '';
                 const ipMatch = url.match(/\d+\.\d+\.\d+\.\d+/);
                 const ip = ipMatch ? ipMatch[0] : 'unknown';
@@ -75,24 +84,59 @@ class AxiosClient {
                         const failCount = failedDomains.get(host) || 0;
                         failedDomains.set(host, failCount + 1);
                         console.log(`[Axios] 📊 ${host} has failed ${failCount + 1} times`);
+                        
+                        // Report failure to HostRulesManager to switch IP
+                        if (this.hostRules) {
+                            this.hostRules.reportFailure(host);
+                            console.log(`[Axios] 🔄 Switching to next IP for ${host}`);
+                        }
                     }
                     
-                    return true; // Retry
+                    return true; // Retry with new IP
                 }
                 
                 if (axiosRetry.isNetworkError(error)) {
                     console.log(`[Axios] 🌐 Network error for ${host}: ${error.message}`);
+                    
+                    // Also report network errors to switch IP
+                    if (host && this.hostRules) {
+                        this.hostRules.reportFailure(host);
+                    }
                     return true;
                 }
                 
                 if (!error.response) {
                     console.log(`[Axios] ❌ No response for ${host}`);
+                    
+                    // Report no response to switch IP
+                    if (host && this.hostRules) {
+                        this.hostRules.reportFailure(host);
+                    }
                     return true;
                 }
                 
                 const status = error.response.status;
                 return status === 429 || (status >= 500 && status <= 599);
             }
+        });
+        
+        // Add response interceptor to track successful IPs
+        this.instance.interceptors.response.use((response) => {
+            const host = response?.config?.headers?.['Host'] as string | undefined;
+            const url = response?.config?.url || '';
+            const ipMatch = url.match(/\d+\.\d+\.\d+\.\d+/);
+            const ip = ipMatch ? ipMatch[0] : 'unknown';
+            
+            if (host && ip !== 'unknown') {
+                console.log(`[Axios] ✅ Success for ${host} using IP ${ip}`);
+                
+                // Reset failure count on success
+                if (failedDomains.has(host)) {
+                    failedDomains.delete(host);
+                }
+            }
+            
+            return response;
         });
     }
 
@@ -150,6 +194,19 @@ class AxiosClient {
         } catch (error: any) {
             console.error(`[Axios] ❌ Request failed: ${error.message}`);
             throw error;
+        }
+    }
+    
+    // Helper method to get current IP for a domain
+    public getCurrentIP(hostname: string): string | undefined {
+        return this.hostRules?.getCurrentIP(hostname);
+    }
+    
+    // Helper method to manually switch IP for a domain
+    public switchIP(hostname: string): void {
+        if (this.hostRules) {
+            this.hostRules.reportFailure(hostname);
+            console.log(`[Axios] 🔄 Manually switching IP for ${hostname}`);
         }
     }
 }

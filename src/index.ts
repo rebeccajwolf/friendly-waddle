@@ -301,7 +301,7 @@ export class MicrosoftRewardsBot {
                     `Starting account: ${accountEmail} | geoLocale: ${account.geoLocale}`
                 )
 
-                this.axios = new AxiosClient(account.proxy)
+                this.axios = new AxiosClient(account.proxy, this)
 
                 const result: { initialPoints: number; collectedPoints: number } | undefined = await this.Main(
                     account

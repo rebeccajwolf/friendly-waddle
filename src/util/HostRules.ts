@@ -7,7 +7,8 @@ export interface HostRuleResult {
 
 export class HostRulesManager {
     private bot: MicrosoftRewardsBot
-    private hostRules: Map<string, string> = new Map()
+    private hostRules: Map<string, string[]> = new Map() // Now stores array of IPs
+    private currentIpIndex: Map<string, number> = new Map() // Track current IP for each domain
 
     constructor(bot: MicrosoftRewardsBot) {
         this.bot = bot
@@ -15,22 +16,83 @@ export class HostRulesManager {
     }
 
     private initializeHostRules(): void {
-        // Keep all domains - net-patch handles resolution but we still need Host headers
-        this.hostRules.set('rewards.bing.com', '150.171.30.10')
-        this.hostRules.set('www.bing.com', '2.18.67.162')
-        this.hostRules.set('account.microsoft.com', '150.171.30.10')
-        this.hostRules.set('prod.rewardsplatform.microsoft.com', '13.107.213.40')
-        this.hostRules.set('login.live.com', '13.107.213.40')
-        this.hostRules.set('www.bingapis.com', '2.18.67.162')
-        this.hostRules.set('api.bing.com', '2.18.67.162')
-        this.hostRules.set('discord.com', '162.159.135.232')
-        this.hostRules.set('gateway.discord.gg', '162.159.135.232')
-        this.hostRules.set('cdn.discordapp.com', '162.159.135.232')
-        this.hostRules.set('discordapp.com', '162.159.135.232')
-        this.hostRules.set('trends.google.com', '142.250.185.46')
-        this.hostRules.set('wikimedia.org', '198.35.26.96')
-        this.hostRules.set('www.reddit.com', '151.101.1.140')
-        this.hostRules.set('raw.githubusercontent.com', '185.199.108.133')
+        // Multiple IPs for each domain (from your DNS resolutions)
+        this.hostRules.set('rewards.bing.com', [
+            '150.171.30.10',
+            '150.171.29.10', 
+            '150.171.28.10',
+            '150.171.27.10'
+        ])
+        this.hostRules.set('www.bing.com', [
+            '2.18.67.162',
+            '2.18.67.135',
+            '2.18.67.136'
+        ])
+        this.hostRules.set('account.microsoft.com', [
+            '150.171.30.10',
+            '150.171.29.10'
+        ])
+        this.hostRules.set('prod.rewardsplatform.microsoft.com', [
+            '13.107.213.40',
+            '13.107.246.40'
+        ])
+        this.hostRules.set('login.live.com', [
+            '13.107.213.40',
+            '13.107.246.40'
+        ])
+        this.hostRules.set('www.bingapis.com', [
+            '2.18.67.162',
+            '150.171.73.13'
+        ])
+        this.hostRules.set('api.bing.com', [
+            '2.18.67.162',
+            '150.171.73.13'
+        ])
+        this.hostRules.set('discord.com', [
+            '162.159.135.232',
+            '162.159.128.233',
+            '162.159.138.232'
+        ])
+        this.hostRules.set('gateway.discord.gg', [
+            '162.159.136.234',
+            '162.159.134.234'
+        ])
+        this.hostRules.set('cdn.discordapp.com', [
+            '162.159.134.233',
+            '162.159.129.233'
+        ])
+        this.hostRules.set('discordapp.com', [
+            '162.159.135.232',
+            '162.159.128.233'
+        ])
+        this.hostRules.set('trends.google.com', ['142.250.185.46'])
+        this.hostRules.set('wikimedia.org', ['198.35.26.96'])
+        this.hostRules.set('www.reddit.com', ['151.101.1.140'])
+        this.hostRules.set('raw.githubusercontent.com', ['185.199.108.133'])
+    }
+
+    // Track failed IPs to try next one
+    public reportFailure(hostname: string) {
+        const domain = this.findMatchingDomain(hostname);
+        if (domain) {
+            const currentIndex = this.currentIpIndex.get(domain) || 0;
+            const ips = this.hostRules.get(domain) || [];
+            
+            // Move to next IP
+            const nextIndex = (currentIndex + 1) % ips.length;
+            this.currentIpIndex.set(domain, nextIndex);
+            
+            console.log(`[HOST-RULES] ${domain} failed, switching to IP ${ips[nextIndex]}`);
+        }
+    }
+
+    private findMatchingDomain(hostname: string): string | null {
+        for (const [domain] of this.hostRules.entries()) {
+            if (hostname === domain || hostname.endsWith(`.${domain}`)) {
+                return domain;
+            }
+        }
+        return null;
     }
 
     private isIPv6(host: string): boolean {
@@ -45,15 +107,22 @@ export class HostRulesManager {
         try {
             const urlObj = new URL(url)
             const hostname = urlObj.hostname
-            let originalHostname: string | undefined = hostname // Default to current hostname
+            let originalHostname: string | undefined = hostname
             let modified = false
+            let mappedHost = hostname
 
-            // Try to find a matching domain in our rules
-            for (const [originalDomain, mappedHost] of this.hostRules.entries()) {
-                const isMatch = hostname === originalDomain || hostname.endsWith(`.${originalDomain}`)
-
-                if (isMatch) {
-                    originalHostname = originalDomain // Store the original domain for Host header
+            // Find matching domain
+            const domain = this.findMatchingDomain(hostname);
+            
+            if (domain) {
+                originalHostname = domain;
+                const ips = this.hostRules.get(domain) || [];
+                
+                // Get current IP index for this domain
+                const currentIndex = this.currentIpIndex.get(domain) || 0;
+                
+                if (ips.length > 0) {
+                    mappedHost = ips[currentIndex];
                     
                     try {
                         if (this.isIPv6(mappedHost)) {
@@ -62,7 +131,9 @@ export class HostRulesManager {
                             urlObj.hostname = mappedHost
                         }
                         modified = true
-                        break
+                        
+                        this.bot.logger.debug(this.bot.isMobile, 'HOST-RULES', 
+                            `Modified: ${hostname} -> ${mappedHost} (${currentIndex + 1}/${ips.length})`)
                     } catch (error) {
                         this.bot.logger.error(
                             this.bot.isMobile,
@@ -74,12 +145,6 @@ export class HostRulesManager {
             }
 
             const finalUrl = urlObj.toString()
-            if (modified) {
-                this.bot.logger.debug(this.bot.isMobile, 'HOST-RULES', 
-                    `Modified: ${hostname} -> ${urlObj.hostname} (Host: ${originalHostname})`)
-            }
-            
-            // Always return originalHostname (even for non-modified domains)
             return { url: finalUrl, originalHostname }
             
         } catch (error) {
@@ -98,17 +163,20 @@ export class HostRulesManager {
             ...additionalHeaders
         }
 
-        // CRITICAL: Always set Host header if we have originalHostname
         if (urlResult.originalHostname) {
             headers['Host'] = urlResult.originalHostname
-            // Debug log
-            console.log(`[HOST-RULES] Setting Host header: ${urlResult.originalHostname}`);
         }
 
         return headers
     }
 
-    getHostMapping(hostname: string): string | undefined {
-        return this.hostRules.get(hostname)
+    getCurrentIP(hostname: string): string | undefined {
+        const domain = this.findMatchingDomain(hostname);
+        if (domain) {
+            const ips = this.hostRules.get(domain) || [];
+            const currentIndex = this.currentIpIndex.get(domain) || 0;
+            return ips[currentIndex];
+        }
+        return undefined;
     }
 }
