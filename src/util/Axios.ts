@@ -32,7 +32,6 @@ class AxiosClient {
             scheduling: 'fifo',
             rejectUnauthorized: false,
             servername: host,
-            // Browser-like TLS settings
             ciphers: 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384',
             honorCipherOrder: true,
             minVersion: 'TLSv1.2',
@@ -64,69 +63,88 @@ class AxiosClient {
         console.log(`[Axios] ${message}`);
     }
 
+    private async makeRequestWithIP(
+        config: AxiosRequestConfig,
+        host: string,
+        ip: string,
+        isRetry: boolean = false
+    ): Promise<AxiosResponse> {
+        try {
+            const urlObj = new URL(config.url!);
+            urlObj.hostname = ip;
+            
+            const browserHeaders = this.getBrowserHeaders(host);
+            const finalHeaders = {
+                ...browserHeaders,
+                ...config.headers,
+                'Host': host
+            };
+
+            const requestConfig: AxiosRequestConfig = {
+                ...config,
+                url: urlObj.toString(),
+                headers: finalHeaders,
+                httpsAgent: this.createBrowserAgent(host),
+                timeout: 15000,
+                maxRedirects: 5,
+                decompress: true,
+                validateStatus: (status) => status < 500
+            };
+
+            // Handle proxy if configured
+            if (this.account.url && this.account.proxyAxios && !isRetry) {
+                this.log(`Proxy configured: ${this.account.url}`);
+                // Proxy implementation would go here
+                // For now, just log that proxy is configured
+            }
+
+            const response = await axios(requestConfig);
+            return response;
+        } catch (error) {
+            throw error;
+        }
+    }
+
     public async request(config: AxiosRequestConfig, bypassProxy = false): Promise<AxiosResponse> {
         const host = config.headers?.['Host'] as string;
         
-        let targetUrl = config.url;
-        let currentIp: string | undefined;
-        
-        if (host && this.hostRules) {
-            currentIp = this.hostRules.getCurrentIP(host);
-            if (currentIp) {
-                try {
-                    const urlObj = new URL(config.url!);
-                    urlObj.hostname = currentIp;
-                    targetUrl = urlObj.toString();
-                    this.log(`Using IP ${currentIp} for ${host}`);
-                } catch (e) {
-                    this.log(`Failed to parse URL: ${config.url}`, 'error');
-                }
-            }
+        if (!host) {
+            return axios(config);
         }
 
-        // Create request with browser-like headers
-        const browserHeaders = this.getBrowserHeaders(host);
-        const finalHeaders = {
-            ...browserHeaders,
-            ...config.headers,
-            'Host': host
-        };
-
-        const requestConfig: AxiosRequestConfig = {
-            ...config,
-            url: targetUrl,
-            headers: finalHeaders,
-            httpsAgent: this.createBrowserAgent(host),
-            timeout: 15000,
-            maxRedirects: 5,
-            decompress: true,
-            validateStatus: (status) => status < 500
-        };
+        let currentIp: string | undefined;
+        
+        if (this.hostRules) {
+            currentIp = this.hostRules.getCurrentIP(host);
+            if (!currentIp) {
+                this.log(`No IP found for ${host}, trying direct connection`);
+                return axios(config);
+            }
+        } else {
+            return axios(config);
+        }
 
         try {
-            const response = await axios(requestConfig);
+            this.log(`Using IP ${currentIp} for ${host}`);
+            const response = await this.makeRequestWithIP(config, host, currentIp);
             this.log(`✅ Success for ${host}`);
             
-            if (host && failedDomains.has(host)) {
+            if (failedDomains.has(host)) {
                 failedDomains.delete(host);
             }
             
             return response;
             
         } catch (error: any) {
-            this.log(`❌ Failed for ${host}: ${error.message}`, 'error');
+            this.log(`❌ Failed for ${host} with IP ${currentIp}: ${error.message}`, 'error');
             
-            if (currentIp) {
-                failedIPs.add(currentIp);
-            }
+            failedIPs.add(currentIp!);
             
-            if (host) {
-                const failCount = failedDomains.get(host) || 0;
-                failedDomains.set(host, failCount + 1);
-                this.log(`📊 ${host} has failed ${failCount + 1} times`);
-            }
+            const failCount = failedDomains.get(host) || 0;
+            failedDomains.set(host, failCount + 1);
+            this.log(`📊 ${host} has failed ${failCount + 1} times`);
             
-            if (host && this.hostRules) {
+            if (this.hostRules) {
                 this.hostRules.reportFailure(host);
                 
                 const newIp = this.hostRules.getCurrentIP(host);
@@ -134,22 +152,22 @@ class AxiosClient {
                     this.log(`🔄 Retrying with IP ${newIp}`);
                     
                     try {
-                        const urlObj = new URL(config.url!);
-                        urlObj.hostname = newIp;
-                        
-                        const retryResponse = await axios({
-                            ...requestConfig,
-                            url: urlObj.toString()
-                        });
-                        
+                        const retryResponse = await this.makeRequestWithIP(config, host, newIp, true);
                         this.log(`✅ Success for ${host} with IP ${newIp}`);
                         return retryResponse;
                     } catch (retryError: any) {
-                        this.log(`❌ Retry failed: ${retryError.message}`, 'error');
+                        this.log(`❌ Retry failed with IP ${newIp}: ${retryError.message}`, 'error');
                         failedIPs.add(newIp);
                     }
                 }
             }
+            
+            // Use bot logger if available for error tracking
+            if (this.bot) {
+                this.bot.logger.error(this.bot.isMobile, 'AXIOS-ERROR', 
+                    `Request failed for ${host}: ${error.message}`);
+            }
+            
             throw error;
         }
     }
@@ -163,6 +181,22 @@ class AxiosClient {
             this.hostRules.reportFailure(hostname);
             this.log(`🔄 Manually switching IP for ${hostname}`);
         }
+    }
+    
+    public getAccountProxy(): AccountProxy {
+        return this.account;
+    }
+    
+    public getBot(): MicrosoftRewardsBot | undefined {
+        return this.bot;
+    }
+    
+    public getFailedIPs(): Set<string> {
+        return failedIPs;
+    }
+    
+    public getFailCount(hostname: string): number {
+        return failedDomains.get(hostname) || 0;
     }
 }
 
