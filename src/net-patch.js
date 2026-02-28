@@ -1,6 +1,7 @@
 // ===== NETWORK PATCH - PRELOAD SCRIPT =====
 const net = require('net');
 const dns = require('dns');
+const tls = require('tls');
 
 const IP_MAP = {
     'rewards.bing.com': ['150.171.30.10', '150.171.29.10', '150.171.28.10', '150.171.27.10'],
@@ -13,7 +14,7 @@ const currentIndex = {};
 
 console.log('🔧 NETWORK PATCH LOADED (Browser Mode)');
 
-// CRITICAL: Patch DNS to return IPs immediately via nextTick
+// Patch DNS to return IPs immediately
 const originalLookup = dns.lookup;
 dns.lookup = (hostname, options, callback) => {
     let opts = options;
@@ -24,16 +25,13 @@ dns.lookup = (hostname, options, callback) => {
         opts = {};
     }
 
-    // Check if domain needs patching
     for (const [domain, ips] of Object.entries(IP_MAP)) {
         if (hostname === domain || hostname.endsWith(`.${domain}`)) {
-            // Initialize index if needed
             if (currentIndex[domain] === undefined) currentIndex[domain] = 0;
             const ip = ips[currentIndex[domain]];
             
             console.log(`[DNS] ${hostname} -> ${ip} (immediate)`);
             
-            // Return IMMEDIATELY via nextTick (browser-like)
             if (opts && opts.all) {
                 process.nextTick(() => cb(null, [{ address: ip, family: 4 }]));
             } else {
@@ -43,7 +41,6 @@ dns.lookup = (hostname, options, callback) => {
         }
     }
 
-    // Force IPv4 for all other domains
     const family = 4;
     if (typeof options === 'function') {
         return originalLookup(hostname, { family }, options);
@@ -54,22 +51,36 @@ dns.lookup = (hostname, options, callback) => {
     return originalLookup(hostname, { ...opts, family });
 };
 
-// Patch socket to prevent connection pooling
+// Patch socket to use browser-like settings
 const originalConnect = net.Socket.prototype.connect;
 net.Socket.prototype.connect = function(...args) {
     const options = args[0];
     
     if (options && typeof options === 'object') {
-        // Force IPv4
         options.family = 4;
+        options.keepAlive = false;
         
-        // Disable keep-alive (browser behavior)
-        if (options.keepAlive !== false) {
-            options.keepAlive = false;
-        }
+        // Add browser-like TCP settings
+        options.noDelay = true;  // Disable Nagle's algorithm
+        options.keepAliveInitialDelay = 0;
     }
     
     return originalConnect.apply(this, args);
+};
+
+// Patch TLS to use browser-like cipher suites
+const originalCreateSecureContext = tls.createSecureContext;
+tls.createSecureContext = function(options) {
+    // Use browser-like TLS settings
+    const browserOptions = {
+        ...options,
+        // Modern browser cipher suites
+        ciphers: 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384',
+        honorCipherOrder: true,
+        minVersion: 'TLSv1.2',
+        maxVersion: 'TLSv1.3'
+    };
+    return originalCreateSecureContext(browserOptions);
 };
 
 console.log('[NET-PATCH] ✅ Ready (Browser Mode)');
