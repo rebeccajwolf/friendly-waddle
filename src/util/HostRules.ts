@@ -186,9 +186,8 @@ export class HostRulesManager {
             }
         }
 
-        // FIX: Use non-null assertion operator since we checked hostValue above
         if (hostValue) {
-            headers['Host'] = hostValue!;
+            headers['Host'] = hostValue;
         }
 
         return headers;
