@@ -48,23 +48,29 @@ async function preResolveAll() {
 // ===== LAYER 5: Patch socket.getaddrinfo (LOWEST LEVEL) =====
 const originalGetaddrinfo = (dns as any).lookup; // Store original
 
-// Helper to get IP (returns only IPv4)
+// Helper to get IP (returns only IPv4) - FIXED TYPE ISSUES
 function getIPv4ForHost(host: string): string | null {
     // Check cache first
     for (const [domain, ips] of ipCache.entries()) {
         if (host === domain || host.endsWith(`.${domain}`)) {
-            return ips[0]; // Return first IPv4
+            // FIX: Check if ips[0] exists
+            if (ips.length > 0 && ips[0] !== undefined) {
+                return ips[0]; // Return first IPv4
+            }
         }
     }
     
     // Check hardcoded map
     for (const [domain, ips] of Object.entries(IP_MAP)) {
         if (host === domain || host.endsWith(`.${domain}`)) {
-            return ips[0];
+            // FIX: Check if ips[0] exists
+            if (ips.length > 0 && ips[0] !== undefined) {
+                return ips[0];
+            }
         }
     }
     
-    return null;
+    return null; // Return null, not undefined
 }
 
 // ===== LAYER 6: Patch net.Socket.connect (like Python's socket patch) =====
@@ -78,7 +84,7 @@ net.Socket.prototype.connect = function(this: any, ...args: any[]) {
         
         if (host && typeof host === 'string') {
             const ip = getIPv4ForHost(host);
-            if (ip) {
+            if (ip !== null) { // Check for null
                 console.log(`[DNS-FINAL] 🔄 ${host} -> ${ip}`);
                 
                 // Store original for TLS SNI
@@ -106,7 +112,7 @@ net.Socket.prototype.connect = function(this: any, ...args: any[]) {
     
     const ip = getIPv4ForHost(hostname);
     
-    if (ip) {
+    if (ip !== null) { // Check for null
         console.log(`[DNS-FINAL] DNS: ${hostname} -> ${ip}`);
         
         if (typeof options === 'function') {
@@ -142,7 +148,7 @@ const originalResolve4 = dns.resolve4;
 (dns as any).resolve4 = function(hostname: string, options: any, callback?: any) {
     const ip = getIPv4ForHost(hostname);
     
-    if (ip) {
+    if (ip !== null) { // Check for null
         if (typeof options === 'function') {
             options(null, [ip]);
             return;
