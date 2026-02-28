@@ -7,8 +7,8 @@ export interface HostRuleResult {
 
 export class HostRulesManager {
     private bot: MicrosoftRewardsBot
-    private hostRules: Map<string, string[]> = new Map() // Now stores array of IPs
-    private currentIpIndex: Map<string, number> = new Map() // Track current IP for each domain
+    private hostRules: Map<string, string[]> = new Map()
+    private currentIpIndex: Map<string, number> = new Map()
 
     constructor(bot: MicrosoftRewardsBot) {
         this.bot = bot
@@ -16,7 +16,6 @@ export class HostRulesManager {
     }
 
     private initializeHostRules(): void {
-        // Multiple IPs for each domain
         this.hostRules.set('rewards.bing.com', [
             '150.171.30.10',
             '150.171.29.10', 
@@ -71,22 +70,17 @@ export class HostRulesManager {
         this.hostRules.set('raw.githubusercontent.com', ['185.199.108.133'])
     }
 
-    // Report failure to switch to next IP
     public reportFailure(hostname: string): void {
         const domain = this.findMatchingDomain(hostname);
         if (domain) {
             const currentIndex = this.currentIpIndex.get(domain) || 0;
             const ips = this.hostRules.get(domain) || [];
-            
-            // Move to next IP
             const nextIndex = (currentIndex + 1) % ips.length;
             this.currentIpIndex.set(domain, nextIndex);
-            
             console.log(`[HOST-RULES] ${domain} failed, switching to IP ${ips[nextIndex]}`);
         }
     }
 
-    // Get current IP for a domain
     public getCurrentIP(hostname: string): string | undefined {
         const domain = this.findMatchingDomain(hostname);
         if (domain) {
@@ -97,7 +91,6 @@ export class HostRulesManager {
         return undefined;
     }
 
-    // Legacy method for backward compatibility
     public getHostMapping(hostname: string): string | undefined {
         const ips = this.getCurrentIP(hostname);
         return ips;
@@ -127,14 +120,11 @@ export class HostRulesManager {
             let originalHostname: string | undefined = hostname
             let mappedHost = hostname
 
-            // Find matching domain
             const domain = this.findMatchingDomain(hostname);
             
             if (domain) {
                 originalHostname = domain;
                 const ips = this.hostRules.get(domain) || [];
-                
-                // Get current IP index for this domain
                 const currentIndex = this.currentIpIndex.get(domain) || 0;
                 
                 if (ips.length > 0) {
@@ -180,12 +170,11 @@ export class HostRulesManager {
     }
 
     buildHeaders(baseHeaders: any, urlResult: HostRuleResult, additionalHeaders?: any): any {
-        const headers: Record<string, string> = {
+        const headers: any = {
             ...baseHeaders,
             ...additionalHeaders
         };
 
-        // Determine host header value
         let hostValue: string | undefined = urlResult.originalHostname;
         
         if (!hostValue) {
@@ -197,9 +186,9 @@ export class HostRulesManager {
             }
         }
 
-        // CRITICAL: Only set if we have a valid string
-        if (hostValue && typeof hostValue === 'string') {
-            headers['Host'] = hostValue;
+        // FIX: Use type assertion to tell TypeScript this is safe
+        if (hostValue) {
+            headers['Host'] = hostValue as string;
         }
 
         return headers;
