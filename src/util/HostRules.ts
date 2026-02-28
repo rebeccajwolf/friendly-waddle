@@ -100,7 +100,7 @@ export class HostRulesManager {
     // Legacy method for backward compatibility
     public getHostMapping(hostname: string): string | undefined {
         const ips = this.getCurrentIP(hostname);
-        return ips; // Returns IP for backward compatibility
+        return ips;
     }
 
     private findMatchingDomain(hostname: string): string | null {
@@ -168,12 +168,10 @@ export class HostRulesManager {
                 'HOST-RULES',
                 `Failed to parse URL ${url}: ${error instanceof Error ? error.message : String(error)}`
             )
-            // Fix: Ensure we return a string for originalHostname
             try {
                 const hostname = new URL(url).hostname;
                 return { url, originalHostname: hostname }
             } catch {
-                // If URL parsing fails, extract hostname manually
                 const match = url.match(/https?:\/\/([^\/]+)/);
                 const hostname = match ? match[1] : 'unknown';
                 return { url, originalHostname: hostname }
@@ -182,31 +180,28 @@ export class HostRulesManager {
     }
 
     buildHeaders(baseHeaders: any, urlResult: HostRuleResult, additionalHeaders?: any): any {
-        const headers = {
+        const headers: Record<string, string> = {
             ...baseHeaders,
             ...additionalHeaders
-        }
+        };
 
-        // FIX: Only set Host header if originalHostname exists and is a string
-        if (urlResult.originalHostname && typeof urlResult.originalHostname === 'string') {
-            headers['Host'] = urlResult.originalHostname;
-        } else if (urlResult.url) {
-            // Fallback: extract hostname from URL
+        // Determine host header value
+        let hostValue: string | undefined = urlResult.originalHostname;
+        
+        if (!hostValue) {
             try {
-                const hostname = new URL(urlResult.url).hostname;
-                if (hostname && typeof hostname === 'string') {
-                    headers['Host'] = hostname;
-                }
+                hostValue = new URL(urlResult.url).hostname;
             } catch {
-                // Ignore if URL parsing fails
-                // Try manual extraction as last resort
                 const match = urlResult.url.match(/https?:\/\/([^\/]+)/);
-                if (match && match[1]) {
-                    headers['Host'] = match[1];
-                }
+                hostValue = match ? match[1] : undefined;
             }
         }
 
-        return headers
+        // CRITICAL: Only set if we have a valid string
+        if (hostValue && typeof hostValue === 'string') {
+            headers['Host'] = hostValue;
+        }
+
+        return headers;
     }
 }
