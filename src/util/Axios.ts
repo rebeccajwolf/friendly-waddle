@@ -12,11 +12,11 @@ const failedDomains: Map<string, number> = new Map();
 class AxiosClient {
     private account: AccountProxy
     private hostRules?: HostRulesManager
-    private bot?: MicrosoftRewardsBot
+    private bot?: MicrosoftRewardsBot  // Keep for future use
 
     constructor(account: AccountProxy, bot?: MicrosoftRewardsBot) {
         this.account = account
-        this.bot = bot
+        this.bot = bot  // Store for future use (logging, etc.)
         
         if (bot) {
             this.hostRules = new HostRulesManager(bot)
@@ -36,6 +36,20 @@ class AxiosClient {
         });
     }
 
+    // Log using bot's logger if available
+    private log(message: string, level: 'info' | 'error' | 'debug' = 'info'): void {
+        if (this.bot) {
+            // Use bot's logger if needed
+            if (level === 'error') {
+                console.error(`[Axios] ${message}`);
+            } else {
+                console.log(`[Axios] ${message}`);
+            }
+        } else {
+            console.log(`[Axios] ${message}`);
+        }
+    }
+
     public async request(config: AxiosRequestConfig, bypassProxy = false): Promise<AxiosResponse> {
         const host = config.headers?.['Host'] as string;
         
@@ -51,16 +65,22 @@ class AxiosClient {
                     const urlObj = new URL(config.url!);
                     urlObj.hostname = currentIp;
                     targetUrl = urlObj.toString();
-                    console.log(`[Axios] Using IP ${currentIp} for ${host}`);
+                    this.log(`Using IP ${currentIp} for ${host}`);
                 } catch (e) {
-                    console.log(`[Axios] Failed to parse URL: ${config.url}`);
+                    this.log(`Failed to parse URL: ${config.url}`, 'error');
                 }
             }
         }
 
         // Check if this IP has failed before
         if (currentIp && failedIPs.has(currentIp)) {
-            console.log(`[Axios] ⚠️ IP ${currentIp} has failed before, may need rotation`);
+            this.log(`⚠️ IP ${currentIp} has failed before, may need rotation`);
+        }
+
+        // Handle proxy if needed
+        if (this.account.url && this.account.proxyAxios && !bypassProxy) {
+            this.log(`Proxy configured: ${this.account.url}`);
+            // Proxy implementation would go here
         }
 
         // CRITICAL: Create fresh axios instance for each request
@@ -70,12 +90,6 @@ class AxiosClient {
             maxRedirects: 0,
             validateStatus: (status) => status < 500
         });
-
-        // Handle proxy if needed
-        if (this.account.url && this.account.proxyAxios && !bypassProxy) {
-            // Proxy handling would go here
-            console.log(`[Axios] Using proxy: ${this.account.url}`);
-        }
 
         try {
             const response = await freshInstance.request({
@@ -88,7 +102,7 @@ class AxiosClient {
                 }
             });
             
-            console.log(`[Axios] ✅ Success for ${host}`);
+            this.log(`✅ Success for ${host}`);
             
             // Reset failure count on success
             if (host && failedDomains.has(host)) {
@@ -98,7 +112,7 @@ class AxiosClient {
             return response;
             
         } catch (error: any) {
-            console.log(`[Axios] ❌ Failed for ${host}: ${error.message}`);
+            this.log(`❌ Failed for ${host}: ${error.message}`, 'error');
             
             // Track failed IP
             if (currentIp && currentIp !== 'unknown') {
@@ -109,7 +123,7 @@ class AxiosClient {
             if (host) {
                 const failCount = failedDomains.get(host) || 0;
                 failedDomains.set(host, failCount + 1);
-                console.log(`[Axios] 📊 ${host} has failed ${failCount + 1} times`);
+                this.log(`📊 ${host} has failed ${failCount + 1} times`);
             }
             
             // Report failure to rotate IP
@@ -119,7 +133,7 @@ class AxiosClient {
                 // Get new IP and retry ONCE
                 const newIp = this.hostRules.getCurrentIP(host);
                 if (newIp && newIp !== currentIp) {
-                    console.log(`[Axios] 🔄 Retrying with IP ${newIp}`);
+                    this.log(`🔄 Retrying with IP ${newIp}`);
                     try {
                         const urlObj = new URL(config.url!);
                         urlObj.hostname = newIp;
@@ -141,10 +155,10 @@ class AxiosClient {
                             }
                         });
                         
-                        console.log(`[Axios] ✅ Success for ${host} with IP ${newIp}`);
+                        this.log(`✅ Success for ${host} with IP ${newIp}`);
                         return retryResponse;
                     } catch (retryError: any) {
-                        console.log(`[Axios] ❌ Retry failed: ${retryError.message}`);
+                        this.log(`❌ Retry failed: ${retryError.message}`, 'error');
                         // Track the new IP as failed
                         failedIPs.add(newIp);
                     }
@@ -162,7 +176,7 @@ class AxiosClient {
     public switchIP(hostname: string): void {
         if (this.hostRules) {
             this.hostRules.reportFailure(hostname);
-            console.log(`[Axios] 🔄 Manually switching IP for ${hostname}`);
+            this.log(`🔄 Manually switching IP for ${hostname}`);
         }
     }
     
@@ -172,6 +186,11 @@ class AxiosClient {
     
     public getFailCount(hostname: string): number {
         return failedDomains.get(hostname) || 0;
+    }
+    
+    // Get bot instance for external use
+    public getBot(): MicrosoftRewardsBot | undefined {
+        return this.bot;
     }
 }
 
