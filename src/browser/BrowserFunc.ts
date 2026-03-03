@@ -15,19 +15,27 @@ import type { AppDashboardData } from '../interface/AppDashBoardData'
 export default class BrowserFunc {
     private bot: MicrosoftRewardsBot
     private hostRules: HostRulesManager
-    private browserHTTP?: BrowserHTTP
+    private browserHTTP: BrowserHTTP  // Keep this - it's used
 
     constructor(bot: MicrosoftRewardsBot) {
         this.bot = bot
         this.hostRules = new HostRulesManager(bot)
+        this.browserHTTP = bot.browserHTTP  // Initialize from bot
     }
 
     /**
      * Set the browser page for HTTP requests
      */
     setPage(page: Page): void {
-        this.bot.browserHTTP.setPage(page);
+        this.browserHTTP.setPage(page);
         this.bot.logger.info(this.bot.isMobile, 'BROWSER-FUNC', 'Browser page set for HTTP requests');
+    }
+
+    /**
+     * Check if browser HTTP is available
+     */
+    isBrowserHTTPAvailable(): boolean {
+        return this.browserHTTP.isAvailable();
     }
 
     /**
@@ -37,7 +45,7 @@ export default class BrowserFunc {
         try {
             this.bot.logger.info(this.bot.isMobile, 'BROWSER-FUNC', 'Fetching dashboard data via browser...');
             
-            const response = await this.bot.browserHTTP.get<any>(
+            const response = await this.browserHTTP.get<any>(
                 'https://rewards.bing.com/api/getuserinfo?type=1'
             );
 
@@ -64,7 +72,7 @@ export default class BrowserFunc {
         try {
             const urlResult = this.hostRules.applyHostRules('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAIOS&options=613');
             
-            const response = await this.bot.browserHTTP.get<any>(urlResult.url, {
+            const response = await this.browserHTTP.get<any>(urlResult.url, {
                 'Authorization': `Bearer ${this.bot.accessToken}`,
                 'User-Agent': 'Bing/32.5.431027001 (com.microsoft.bing; build:431027001; iOS 17.6.1) Alamofire/5.10.2'
             });
@@ -87,7 +95,7 @@ export default class BrowserFunc {
         try {
             const urlResult = this.hostRules.applyHostRules('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=xboxapp&options=6');
             
-            const response = await this.bot.browserHTTP.get<any>(urlResult.url, {
+            const response = await this.browserHTTP.get<any>(urlResult.url, {
                 'Authorization': `Bearer ${this.bot.accessToken}`,
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; Xbox; Xbox One X) AppleWebKit/537.36 (KHTML, like Gecko) Edge/18.19041'
             });
@@ -111,7 +119,7 @@ export default class BrowserFunc {
             const eligibleOffers = ['ENUS_readarticle3_30points', 'Gamification_Sapphire_DailyCheckIn'];
             const urlResult = this.hostRules.applyHostRules('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAAndroid&options=613');
             
-            const response = await this.bot.browserHTTP.get<any>(urlResult.url, {
+            const response = await this.browserHTTP.get<any>(urlResult.url, {
                 'Authorization': `Bearer ${this.bot.accessToken}`,
                 'X-Rewards-Country': this.bot.userData.geoLocale,
                 'X-Rewards-Language': 'en',
