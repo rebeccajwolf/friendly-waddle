@@ -9,8 +9,65 @@ export class AppReward extends Workers {
         return new HostRulesManager(this.bot)
     }
     private gainedPoints: number = 0
-
     private oldBalance: number = this.bot.userData.currentPoints
+
+    /**
+     * Make a request using either axios or browser HTTP with fallback
+     */
+    private async makeRequest<T>(
+        config: AxiosRequestConfig,
+        useProxy: boolean,
+        fallbackToBrowser: boolean = true
+    ): Promise<T> {
+        // Try axios first
+        try {
+            const response = await this.bot.axios.request(config, useProxy);
+            return response.data as T;
+        } catch (axiosError) {
+            // If axios fails and browser HTTP is available, try that
+            if (fallbackToBrowser && this.bot.browserHTTP?.isAvailable()) {
+                this.bot.logger.debug(
+                    this.bot.isMobile,
+                    'APP-REWARD',
+                    `Axios failed, falling back to browser HTTP: ${axiosError instanceof Error ? axiosError.message : String(axiosError)}`
+                );
+
+                try {
+                    const method = config.method?.toUpperCase() || 'GET';
+                    const url = config.url || '';
+                    const headers = config.headers as Record<string, string> || {};
+                    
+                    // Handle JSON string body
+                    let body = config.data;
+                    if (typeof body === 'string') {
+                        try {
+                            body = JSON.parse(body);
+                        } catch {
+                            // Keep as string if not JSON
+                        }
+                    }
+
+                    // Make request via browser
+                    let response;
+                    if (method === 'POST') {
+                        response = await this.bot.browserHTTP.post<T>(url, body, headers);
+                    } else {
+                        response = await this.bot.browserHTTP.get<T>(url, headers);
+                    }
+
+                    return response.data as T;
+                } catch (browserError) {
+                    this.bot.logger.error(
+                        this.bot.isMobile,
+                        'APP-REWARD',
+                        `Browser HTTP also failed: ${browserError instanceof Error ? browserError.message : String(browserError)}`
+                    );
+                    throw browserError;
+                }
+            }
+            throw axiosError;
+        }
+    }
 
     public async doAppReward(promotion: Promotion) {
         if (!this.bot.accessToken) {
@@ -73,15 +130,15 @@ export class AppReward extends Workers {
                 `Sending activity request | offerId=${offerId} | url=${request.url}`
             )
 
-            const response = await this.bot.axios.request(request)
+            const responseData = await this.makeRequest<any>(request, true, true)
 
             this.bot.logger.debug(
                 this.bot.isMobile,
                 'APP-REWARD',
-                `Received activity response | offerId=${offerId} | status=${response.status}`
+                `Received activity response | offerId=${offerId}`
             )
 
-            const newBalance = Number(response?.data?.response?.balance ?? this.oldBalance)
+            const newBalance = Number(responseData?.response?.balance ?? this.oldBalance)
             this.gainedPoints = newBalance - this.oldBalance
 
             this.bot.logger.debug(

@@ -7,6 +7,63 @@ export class ReadToEarn extends Workers {
     private get hostRules(): HostRulesManager {
         return new HostRulesManager(this.bot)
     }
+
+    /**
+     * Make a request using either axios or browser HTTP with fallback
+     */
+    private async makeRequest<T>(
+        config: AxiosRequestConfig,
+        useProxy: boolean,
+        fallbackToBrowser: boolean = true
+    ): Promise<T> {
+        // Try axios first
+        try {
+            const response = await this.bot.axios.request(config, useProxy);
+            return response.data as T;
+        } catch (axiosError) {
+            // If axios fails and browser HTTP is available, try that
+            if (fallbackToBrowser && this.bot.browserHTTP?.isAvailable()) {
+                this.bot.logger.debug(
+                    this.bot.isMobile,
+                    'READ-TO-EARN',
+                    `Axios failed, falling back to browser HTTP: ${axiosError instanceof Error ? axiosError.message : String(axiosError)}`
+                );
+
+                try {
+                    const method = config.method?.toUpperCase() || 'GET';
+                    const url = config.url || '';
+                    const headers = config.headers as Record<string, string> || {};
+                    
+                    let body = config.data;
+                    if (typeof body === 'string') {
+                        try {
+                            body = JSON.parse(body);
+                        } catch {
+                            // Keep as string if not JSON
+                        }
+                    }
+
+                    let response;
+                    if (method === 'POST') {
+                        response = await this.bot.browserHTTP.post<T>(url, body, headers);
+                    } else {
+                        response = await this.bot.browserHTTP.get<T>(url, headers);
+                    }
+
+                    return response.data as T;
+                } catch (browserError) {
+                    this.bot.logger.error(
+                        this.bot.isMobile,
+                        'READ-TO-EARN',
+                        `Browser HTTP also failed: ${browserError instanceof Error ? browserError.message : String(browserError)}`
+                    );
+                    throw browserError;
+                }
+            }
+            throw axiosError;
+        }
+    }
+
     public async doReadToEarn() {
         if (!this.bot.accessToken) {
             this.bot.logger.warn(
@@ -72,15 +129,15 @@ export class ReadToEarn extends Workers {
                     data: JSON.stringify(jsonData)
                 }
 
-                const response = await this.bot.axios.request(request)
+                const responseData = await this.makeRequest<any>(request, true, true)
 
                 this.bot.logger.debug(
                     this.bot.isMobile,
                     'READ-TO-EARN',
-                    `Received Read to Earn response | article=${i + 1}/${articleCount} | status=${response?.status ?? 'unknown'}`
+                    `Received Read to Earn response | article=${i + 1}/${articleCount}`
                 )
 
-                const newBalance = Number(response?.data?.response?.balance ?? oldBalance)
+                const newBalance = Number(responseData?.response?.balance ?? oldBalance)
                 const gainedPoints = newBalance - oldBalance
 
                 this.bot.logger.debug(
@@ -93,7 +150,7 @@ export class ReadToEarn extends Workers {
                     this.bot.logger.info(
                         this.bot.isMobile,
                         'READ-TO-EARN',
-                        `No points gained, stopping Read to Earn | article=${i + 1}/${articleCount} | status=${response.status} | oldBalance=${oldBalance} | newBalance=${newBalance}`
+                        `No points gained, stopping Read to Earn | article=${i + 1}/${articleCount} | oldBalance=${oldBalance} | newBalance=${newBalance}`
                     )
                     break
                 }
@@ -108,7 +165,7 @@ export class ReadToEarn extends Workers {
                 this.bot.logger.info(
                     this.bot.isMobile,
                     'READ-TO-EARN',
-                    `Read article ${i + 1}/${articleCount} | status=${response.status} | gainedPoints=${gainedPoints} | newBalance=${newBalance}`,
+                    `Read article ${i + 1}/${articleCount} | gainedPoints=${gainedPoints} | newBalance=${newBalance}`,
                     'green'
                 )
 

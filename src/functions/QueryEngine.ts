@@ -13,6 +13,62 @@ export class QueryCore {
         this.hostRules = new HostRulesManager(bot)
     }
 
+    /**
+     * Make a request using either axios or browser HTTP with fallback
+     */
+    private async makeRequest<T>(
+        config: AxiosRequestConfig,
+        useProxy: boolean,
+        fallbackToBrowser: boolean = true
+    ): Promise<T> {
+        // Try axios first
+        try {
+            const response = await this.bot.axios.request(config, useProxy);
+            return response.data as T;
+        } catch (axiosError) {
+            // If axios fails and browser HTTP is available, try that
+            if (fallbackToBrowser && this.bot.browserHTTP?.isAvailable()) {
+                this.bot.logger.debug(
+                    this.bot.isMobile,
+                    'QUERY-REQUEST',
+                    `Axios failed, falling back to browser HTTP: ${axiosError instanceof Error ? axiosError.message : String(axiosError)}`
+                );
+
+                try {
+                    // Extract method, url, headers from config
+                    const method = config.method?.toUpperCase() || 'GET';
+                    const url = config.url || '';
+                    const headers = config.headers as Record<string, string> || {};
+
+                    // Make request via browser
+                    let response;
+                    if (method === 'GET') {
+                        response = await this.bot.browserHTTP.get<T>(url, headers);
+                    } else if (method === 'POST') {
+                        response = await this.bot.browserHTTP.post<T>(url, config.data, headers);
+                    } else {
+                        // For other methods, use generic request
+                        response = await this.bot.browserHTTP.request<T>(url, {
+                            method: method as any,
+                            headers,
+                            body: config.data
+                        });
+                    }
+
+                    return response.data as T;
+                } catch (browserError) {
+                    this.bot.logger.error(
+                        this.bot.isMobile,
+                        'QUERY-REQUEST',
+                        `Browser HTTP also failed: ${browserError instanceof Error ? browserError.message : String(browserError)}`
+                    );
+                    throw browserError;
+                }
+            }
+            throw axiosError;
+        }
+    }
+
     async queryManager(
         options: {
             shuffle?: boolean
@@ -208,7 +264,7 @@ export class QueryCore {
         try {
             const urlResult = this.hostRules.applyHostRules('https://trends.google.com/_/TrendsUi/data/batchexecute')
 
-            const request: AxiosRequestConfig = {
+            const config: AxiosRequestConfig = {
                 url: urlResult.url,
                 method: 'POST',
                 headers: this.hostRules.buildHeaders(
@@ -220,8 +276,9 @@ export class QueryCore {
                 data: `f.req=[[[i0OFE,"[null, null, \\"${geoLocale.toUpperCase()}\\", 0, null, 48]"]]]`
             }
 
-            const response = await this.bot.axios.request(request, this.bot.config.proxy.queryEngine)
-            const trendsData = this.extractJsonFromResponse(response.data)
+            const data = await this.makeRequest<any>(config, this.bot.config.proxy.queryEngine, true);
+            const trendsData = this.extractJsonFromResponse(data)
+            
             if (!trendsData) {
                 this.bot.logger.debug(this.bot.isMobile, 'SEARCH-GOOGLE-TRENDS', 'No trendsData parsed from response')
                 return []
@@ -270,7 +327,7 @@ export class QueryCore {
                 `https://www.bingapis.com/api/v7/suggestions?q=${encodeURIComponent(query)}&appid=6D0A9B8C5100E9ECC7E11A104ADD76C10219804B&cc=xl&setlang=${langCode}`
             )
 
-            const request: AxiosRequestConfig = {
+            const config: AxiosRequestConfig = {
                 url: urlResult.url,
                 method: 'POST',
                 headers: this.hostRules.buildHeaders(
@@ -282,9 +339,8 @@ export class QueryCore {
                 )
             }
 
-            const response = await this.bot.axios.request(request, this.bot.config.proxy.queryEngine)
-            const suggestions =
-                response.data.suggestionGroups?.[0]?.searchSuggestions?.map((x: { query: any }) => x.query) ?? []
+            const data = await this.makeRequest<any>(config, this.bot.config.proxy.queryEngine, true);
+            const suggestions = data.suggestionGroups?.[0]?.searchSuggestions?.map((x: { query: any }) => x.query) ?? [];
 
             if (!suggestions.length) {
                 this.bot.logger.debug(
@@ -311,7 +367,7 @@ export class QueryCore {
         try {
             const urlResult = this.hostRules.applyHostRules(`https://api.bing.com/osjson.aspx?query=${encodeURIComponent(query)}`)
 
-            const request: AxiosRequestConfig = {
+            const config: AxiosRequestConfig = {
                 url: urlResult.url,
                 method: 'GET',
                 headers: this.hostRules.buildHeaders(
@@ -322,9 +378,9 @@ export class QueryCore {
                 )
             }
 
-            const response = await this.bot.axios.request(request, this.bot.config.proxy.queryEngine)
-            const related = response.data?.[1]
-            const out = Array.isArray(related) ? related : []
+            const data = await this.makeRequest<any>(config, this.bot.config.proxy.queryEngine, true);
+            const related = data?.[1];
+            const out = Array.isArray(related) ? related : [];
 
             if (!out.length) {
                 this.bot.logger.debug(
@@ -353,7 +409,7 @@ export class QueryCore {
                 `https://www.bing.com/api/v7/news/trendingtopics?appid=91B36E34F9D1B900E54E85A77CF11FB3BE5279E6&cc=xl&setlang=${langCode}`
             )
 
-            const request: AxiosRequestConfig = {
+            const config: AxiosRequestConfig = {
                 url: urlResult.url,
                 method: 'GET',
                 headers: this.hostRules.buildHeaders(
@@ -370,11 +426,10 @@ export class QueryCore {
                 )
             }
 
-            const response = await this.bot.axios.request(request, this.bot.config.proxy.queryEngine)
-            const topics =
-                response.data.value?.map(
+            const data = await this.makeRequest<any>(config, this.bot.config.proxy.queryEngine, true);
+            const topics = data.value?.map(
                     (x: { query: { text: string }; name: string }) => x.query?.text?.trim() || x.name.trim()
-                ) ?? []
+                ) ?? [];
 
             if (!topics.length) {
                 this.bot.logger.debug(
@@ -408,7 +463,7 @@ export class QueryCore {
                 `https://wikimedia.org/api/rest_v1/metrics/pageviews/top/${langCode}.wikipedia/all-access/${yyyy}/${mm}/${dd}`
             )
 
-            const request: AxiosRequestConfig = {
+            const config: AxiosRequestConfig = {
                 url: urlResult.url,
                 method: 'GET',
                 headers: this.hostRules.buildHeaders(
@@ -419,8 +474,8 @@ export class QueryCore {
                 )
             }
 
-            const response = await this.bot.axios.request(request, this.bot.config.proxy.queryEngine)
-            const articles = (response.data as WikipediaTopResponse).items?.[0]?.articles ?? []
+            const data = await this.makeRequest<WikipediaTopResponse>(config, this.bot.config.proxy.queryEngine, true);
+            const articles = data.items?.[0]?.articles ?? [];
 
             const out = articles.slice(0, 50).map(a => a.article.replace(/_/g, ' '))
 
@@ -450,7 +505,7 @@ export class QueryCore {
             const safe = subreddit.replace(/[^a-zA-Z0-9_+]/g, '')
             const urlResult = this.hostRules.applyHostRules(`https://www.reddit.com/r/${safe}.json?limit=50`)
 
-            const request: AxiosRequestConfig = {
+            const config: AxiosRequestConfig = {
                 url: urlResult.url,
                 method: 'GET',
                 headers: this.hostRules.buildHeaders(
@@ -461,10 +516,10 @@ export class QueryCore {
                 )
             }
 
-            const response = await this.bot.axios.request(request, this.bot.config.proxy.queryEngine)
-            const posts = (response.data as RedditListing).data?.children ?? []
+            const data = await this.makeRequest<RedditListing>(config, this.bot.config.proxy.queryEngine, true);
+            const posts = data.data?.children ?? [];
 
-            const out = posts.filter(p => !p.data.over_18).map(p => p.data.title)
+            const out = posts.filter((p: any) => !p.data.over_18).map((p: any) => p.data.title)
 
             if (!out.length) {
                 this.bot.logger.debug(

@@ -8,8 +8,63 @@ export class DailyCheckIn extends Workers {
         return new HostRulesManager(this.bot)
     }
     private gainedPoints: number = 0
-
     private oldBalance: number = this.bot.userData.currentPoints
+
+    /**
+     * Make a request using either axios or browser HTTP with fallback
+     */
+    private async makeRequest<T>(
+        config: AxiosRequestConfig,
+        useProxy: boolean,
+        fallbackToBrowser: boolean = true
+    ): Promise<T> {
+        // Try axios first
+        try {
+            const response = await this.bot.axios.request(config, useProxy);
+            return response.data as T;
+        } catch (axiosError) {
+            // If axios fails and browser HTTP is available, try that
+            if (fallbackToBrowser && this.bot.browserHTTP?.isAvailable()) {
+                this.bot.logger.debug(
+                    this.bot.isMobile,
+                    'DAILY-CHECK-IN',
+                    `Axios failed, falling back to browser HTTP: ${axiosError instanceof Error ? axiosError.message : String(axiosError)}`
+                );
+
+                try {
+                    const method = config.method?.toUpperCase() || 'GET';
+                    const url = config.url || '';
+                    const headers = config.headers as Record<string, string> || {};
+                    
+                    let body = config.data;
+                    if (typeof body === 'string') {
+                        try {
+                            body = JSON.parse(body);
+                        } catch {
+                            // Keep as string if not JSON
+                        }
+                    }
+
+                    let response;
+                    if (method === 'POST') {
+                        response = await this.bot.browserHTTP.post<T>(url, body, headers);
+                    } else {
+                        response = await this.bot.browserHTTP.get<T>(url, headers);
+                    }
+
+                    return response.data as T;
+                } catch (browserError) {
+                    this.bot.logger.error(
+                        this.bot.isMobile,
+                        'DAILY-CHECK-IN',
+                        `Browser HTTP also failed: ${browserError instanceof Error ? browserError.message : String(browserError)}`
+                    );
+                    throw browserError;
+                }
+            }
+            throw axiosError;
+        }
+    }
 
     public async doDailyCheckIn() {
         if (!this.bot.accessToken) {
@@ -33,14 +88,14 @@ export class DailyCheckIn extends Workers {
             // Try type 101 first
             this.bot.logger.debug(this.bot.isMobile, 'DAILY-CHECK-IN', 'Attempting Daily Check-In | type=101')
 
-            let response = await this.submitDaily(101) // Try using 101 (EU Variant?)
+            let responseData = await this.submitDaily(101)
             this.bot.logger.debug(
                 this.bot.isMobile,
                 'DAILY-CHECK-IN',
-                `Received Daily Check-In response | type=101 | status=${response?.status ?? 'unknown'}`
+                `Received Daily Check-In response | type=101`
             )
 
-            let newBalance = Number(response?.data?.response?.balance ?? this.oldBalance)
+            let newBalance = Number(responseData?.response?.balance ?? this.oldBalance)
             this.gainedPoints = newBalance - this.oldBalance
 
             this.bot.logger.debug(
@@ -71,14 +126,14 @@ export class DailyCheckIn extends Workers {
             // Fallback to type 103
             this.bot.logger.debug(this.bot.isMobile, 'DAILY-CHECK-IN', 'Attempting Daily Check-In | type=103')
 
-            response = await this.submitDaily(103) // Try using 103 (USA Variant?)
+            responseData = await this.submitDaily(103)
             this.bot.logger.debug(
                 this.bot.isMobile,
                 'DAILY-CHECK-IN',
-                `Received Daily Check-In response | type=103 | status=${response?.status ?? 'unknown'}`
+                `Received Daily Check-In response | type=103`
             )
 
-            newBalance = Number(response?.data?.response?.balance ?? this.oldBalance)
+            newBalance = Number(responseData?.response?.balance ?? this.oldBalance)
             this.gainedPoints = newBalance - this.oldBalance
 
             this.bot.logger.debug(
@@ -113,7 +168,7 @@ export class DailyCheckIn extends Workers {
         }
     }
 
-    private async submitDaily(type: number) {
+    private async submitDaily(type: number): Promise<any> {
         try {
             const jsonData = {
                 id: randomUUID(),
@@ -157,7 +212,7 @@ export class DailyCheckIn extends Workers {
                 `Sending Daily Check-In request | type=${type} | url=${request.url}`
             )
 
-            return this.bot.axios.request(request)
+            return this.makeRequest<any>(request, true, true)
         } catch (error) {
             this.bot.logger.error(
                 this.bot.isMobile,

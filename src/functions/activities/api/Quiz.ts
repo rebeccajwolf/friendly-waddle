@@ -5,15 +5,68 @@ import { HostRulesManager } from '../../../util/HostRules'
 
 export class Quiz extends Workers {
     private cookieHeader: string = ''
-
     private fingerprintHeader: { [x: string]: string } = {}
-
     private gainedPoints: number = 0
-
     private oldBalance: number = this.bot.userData.currentPoints
 
     private get hostRules(): HostRulesManager {
         return new HostRulesManager(this.bot)
+    }
+
+    /**
+     * Make a request using either axios or browser HTTP with fallback
+     */
+    private async makeRequest<T>(
+        config: AxiosRequestConfig,
+        useProxy: boolean,
+        fallbackToBrowser: boolean = true
+    ): Promise<T> {
+        // Try axios first
+        try {
+            const response = await this.bot.axios.request(config, useProxy);
+            return response.data as T;
+        } catch (axiosError) {
+            // If axios fails and browser HTTP is available, try that
+            if (fallbackToBrowser && this.bot.browserHTTP?.isAvailable()) {
+                this.bot.logger.debug(
+                    this.bot.isMobile,
+                    'QUIZ',
+                    `Axios failed, falling back to browser HTTP: ${axiosError instanceof Error ? axiosError.message : String(axiosError)}`
+                );
+
+                try {
+                    const method = config.method?.toUpperCase() || 'GET';
+                    const url = config.url || '';
+                    const headers = config.headers as Record<string, string> || {};
+                    
+                    let body = config.data;
+                    if (typeof body === 'string') {
+                        try {
+                            body = JSON.parse(body);
+                        } catch {
+                            // Keep as string if not JSON
+                        }
+                    }
+
+                    let response;
+                    if (method === 'POST') {
+                        response = await this.bot.browserHTTP.post<T>(url, body, headers);
+                    } else {
+                        response = await this.bot.browserHTTP.get<T>(url, headers);
+                    }
+
+                    return response.data as T;
+                } catch (browserError) {
+                    this.bot.logger.error(
+                        this.bot.isMobile,
+                        'QUIZ',
+                        `Browser HTTP also failed: ${browserError instanceof Error ? browserError.message : String(browserError)}`
+                    );
+                    throw browserError;
+                }
+            }
+            throw axiosError;
+        }
     }
 
     async doQuiz(promotion: BasePromotion) {
@@ -51,8 +104,6 @@ export class Quiz extends Workers {
                     'QUIZ',
                     `Detected 8-question quiz (activityProgressMax=80), marking as completed | offerId=${offerId}`
                 )
-
-                // Not implemented
                 return
             }
 
@@ -102,12 +153,12 @@ export class Quiz extends Workers {
                             `Sending ReportActivity request | attempt=${i + 1}/${maxAttempts} | offerId=${offerId} | url=${request.url}`
                         )
 
-                        const response = await this.bot.axios.request(request)
+                        const responseData = await this.makeRequest<any>(request, true, true)
 
                         this.bot.logger.debug(
                             this.bot.isMobile,
                             'QUIZ',
-                            `Received ReportActivity response | attempt=${i + 1}/${maxAttempts} | offerId=${offerId} | status=${response.status}`
+                            `Received ReportActivity response | attempt=${i + 1}/${maxAttempts} | offerId=${offerId}`
                         )
 
                         const newBalance = await this.bot.browser.func.getCurrentPoints()
@@ -132,7 +183,7 @@ export class Quiz extends Workers {
                             this.bot.logger.info(
                                 this.bot.isMobile,
                                 'QUIZ',
-                                `ReportActivity ${i + 1} → ${response.status} | offerId=${offerId} | gainedPoints=${gainedPoints} | newBalance=${newBalance}`,
+                                `ReportActivity ${i + 1} | offerId=${offerId} | gainedPoints=${gainedPoints} | newBalance=${newBalance}`,
                                 'green'
                             )
                         } else {

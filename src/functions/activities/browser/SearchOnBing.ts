@@ -27,6 +27,66 @@ export class SearchOnBing extends Workers {
         return new HostRulesManager(this.bot)
     }
 
+    /**
+     * Make a request using either axios or browser HTTP with fallback
+     */
+    private async makeRequest<T>(
+        config: AxiosRequestConfig,
+        useProxy: boolean,
+        fallbackToBrowser: boolean = true
+    ): Promise<T> {
+        // Try axios first
+        try {
+            const response = await this.bot.axios.request(config, useProxy);
+            return response.data as T;
+        } catch (axiosError) {
+            // If axios fails and browser HTTP is available, try that
+            if (fallbackToBrowser && this.bot.browserHTTP?.isAvailable()) {
+                this.bot.logger.debug(
+                    this.bot.isMobile,
+                    'SEARCH-ON-BING',
+                    `Axios failed, falling back to browser HTTP: ${axiosError instanceof Error ? axiosError.message : String(axiosError)}`
+                );
+
+                try {
+                    const method = config.method?.toUpperCase() || 'GET';
+                    const url = config.url || '';
+                    const headers = config.headers as Record<string, string> || {};
+                    
+                    // Handle URLSearchParams for POST requests
+                    let body = config.data;
+                    if (config.data instanceof URLSearchParams) {
+                        body = Object.fromEntries(config.data);
+                    } else if (typeof body === 'string') {
+                        try {
+                            body = JSON.parse(body);
+                        } catch {
+                            // Keep as string if not JSON
+                        }
+                    }
+
+                    // Make request via browser
+                    let response;
+                    if (method === 'POST') {
+                        response = await this.bot.browserHTTP.post<T>(url, body, headers);
+                    } else {
+                        response = await this.bot.browserHTTP.get<T>(url, headers);
+                    }
+
+                    return response.data as T;
+                } catch (browserError) {
+                    this.bot.logger.error(
+                        this.bot.isMobile,
+                        'SEARCH-ON-BING',
+                        `Browser HTTP also failed: ${browserError instanceof Error ? browserError.message : String(browserError)}`
+                    );
+                    throw browserError;
+                }
+            }
+            throw axiosError;
+        }
+    }
+
     public async doSearchOnBing(promotion: BasePromotion, page: Page) {
         const offerId = promotion.offerId
         this.oldBalance = Number(this.bot.userData.currentPoints ?? 0)
@@ -220,11 +280,12 @@ export class SearchOnBing extends Workers {
                 data: formData
             }
 
-            const response = await this.bot.axios.request(request)
+            const responseData = await this.makeRequest<any>(request, true, true)
+            
             this.bot.logger.info(
                 this.bot.isMobile,
                 'SEARCH-ON-BING-ACTIVATE',
-                `Successfully activated activity | status=${response.status} | offerId=${promotion.offerId}`
+                `Successfully activated activity | offerId=${promotion.offerId}`
             )
             return true
         } catch (error) {
@@ -275,8 +336,8 @@ export class SearchOnBing extends Workers {
                     )
                 }
 
-                const response = await this.bot.axios.request(request)
-                queries = response.data
+                const responseData = await this.makeRequest<any>(request, true, true)
+                queries = responseData
 
                 this.bot.logger.debug(
                     this.bot.isMobile,

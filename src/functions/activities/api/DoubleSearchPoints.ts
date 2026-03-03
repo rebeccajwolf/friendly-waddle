@@ -5,11 +5,65 @@ import { HostRulesManager } from '../../../util/HostRules'
 
 export class DoubleSearchPoints extends Workers {
     private cookieHeader: string = ''
-
     private fingerprintHeader: { [x: string]: string } = {}
 
     private get hostRules(): HostRulesManager {
         return new HostRulesManager(this.bot)
+    }
+
+    /**
+     * Make a request using either axios or browser HTTP with fallback
+     */
+    private async makeRequest<T>(
+        config: AxiosRequestConfig,
+        useProxy: boolean,
+        fallbackToBrowser: boolean = true
+    ): Promise<T> {
+        // Try axios first
+        try {
+            const response = await this.bot.axios.request(config, useProxy);
+            return response.data as T;
+        } catch (axiosError) {
+            // If axios fails and browser HTTP is available, try that
+            if (fallbackToBrowser && this.bot.browserHTTP?.isAvailable()) {
+                this.bot.logger.debug(
+                    this.bot.isMobile,
+                    'DOUBLE-SEARCH-POINTS',
+                    `Axios failed, falling back to browser HTTP: ${axiosError instanceof Error ? axiosError.message : String(axiosError)}`
+                );
+
+                try {
+                    // Extract method, url, headers from config
+                    const method = config.method?.toUpperCase() || 'GET';
+                    const url = config.url || '';
+                    const headers = config.headers as Record<string, string> || {};
+                    
+                    // For POST requests with URLSearchParams, convert to object
+                    let body = config.data;
+                    if (config.data instanceof URLSearchParams) {
+                        body = Object.fromEntries(config.data);
+                    }
+
+                    // Make request via browser
+                    let response;
+                    if (method === 'POST') {
+                        response = await this.bot.browserHTTP.post<T>(url, body, headers);
+                    } else {
+                        response = await this.bot.browserHTTP.get<T>(url, headers);
+                    }
+
+                    return response.data as T;
+                } catch (browserError) {
+                    this.bot.logger.error(
+                        this.bot.isMobile,
+                        'DOUBLE-SEARCH-POINTS',
+                        `Browser HTTP also failed: ${browserError instanceof Error ? browserError.message : String(browserError)}`
+                    );
+                    throw browserError;
+                }
+            }
+            throw axiosError;
+        }
     }
 
     public async doDoubleSearchPoints(promotion: PromotionalItem) {
@@ -90,12 +144,12 @@ export class DoubleSearchPoints extends Workers {
                 `Sending Double Search Points request | offerId=${offerId} | url=${request.url}`
             )
 
-            const response = await this.bot.axios.request(request)
+            const responseData = await this.makeRequest<any>(request, true, true)
 
             this.bot.logger.debug(
                 this.bot.isMobile,
                 'DOUBLE-SEARCH-POINTS',
-                `Received Double Search Points response | offerId=${offerId} | status=${response.status}`
+                `Received Double Search Points response | offerId=${offerId}`
             )
 
             const data = await this.bot.browser.func.getDashboardData()
@@ -103,18 +157,18 @@ export class DoubleSearchPoints extends Workers {
                 item.name.toLowerCase().includes('ww_banner_optin_2x')
             )
 
-            // If OK, should no longer be presernt in promotionalItems
+            // If OK, should no longer be present in promotionalItems
             if (promotionalItem) {
                 this.bot.logger.warn(
                     this.bot.isMobile,
                     'DOUBLE-SEARCH-POINTS',
-                    `Unable to find or activate Double Search Points | offerId=${offerId} | status=${response.status}`
+                    `Unable to find or activate Double Search Points | offerId=${offerId}`
                 )
             } else {
                 this.bot.logger.info(
                     this.bot.isMobile,
                     'DOUBLE-SEARCH-POINTS',
-                    `Activated Double Search Points | offerId=${offerId} | status=${response.status}`,
+                    `Activated Double Search Points | offerId=${offerId}`,
                     'green'
                 )
             }

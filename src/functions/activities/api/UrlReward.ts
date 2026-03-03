@@ -5,15 +5,64 @@ import { HostRulesManager } from '../../../util/HostRules'
 
 export class UrlReward extends Workers {
     private cookieHeader: string = ''
-
     private fingerprintHeader: { [x: string]: string } = {}
-
     private gainedPoints: number = 0
-
     private oldBalance: number = this.bot.userData.currentPoints
 
     private get hostRules(): HostRulesManager {
         return new HostRulesManager(this.bot)
+    }
+
+    /**
+     * Make a request using either axios or browser HTTP with fallback
+     */
+    private async makeRequest<T>(
+        config: AxiosRequestConfig,
+        useProxy: boolean,
+        fallbackToBrowser: boolean = true
+    ): Promise<T> {
+        // Try axios first
+        try {
+            const response = await this.bot.axios.request(config, useProxy);
+            return response.data as T;
+        } catch (axiosError) {
+            // If axios fails and browser HTTP is available, try that
+            if (fallbackToBrowser && this.bot.browserHTTP?.isAvailable()) {
+                this.bot.logger.debug(
+                    this.bot.isMobile,
+                    'URL-REWARD',
+                    `Axios failed, falling back to browser HTTP: ${axiosError instanceof Error ? axiosError.message : String(axiosError)}`
+                );
+
+                try {
+                    const method = config.method?.toUpperCase() || 'GET';
+                    const url = config.url || '';
+                    const headers = config.headers as Record<string, string> || {};
+                    
+                    let body = config.data;
+                    if (config.data instanceof URLSearchParams) {
+                        body = Object.fromEntries(config.data);
+                    }
+
+                    let response;
+                    if (method === 'POST') {
+                        response = await this.bot.browserHTTP.post<T>(url, body, headers);
+                    } else {
+                        response = await this.bot.browserHTTP.get<T>(url, headers);
+                    }
+
+                    return response.data as T;
+                } catch (browserError) {
+                    this.bot.logger.error(
+                        this.bot.isMobile,
+                        'URL-REWARD',
+                        `Browser HTTP also failed: ${browserError instanceof Error ? browserError.message : String(browserError)}`
+                    );
+                    throw browserError;
+                }
+            }
+            throw axiosError;
+        }
     }
 
     public async doUrlReward(promotion: BasePromotion) {
@@ -93,12 +142,12 @@ export class UrlReward extends Workers {
                 `Sending UrlReward request | offerId=${offerId} | url=${request.url}`
             )
 
-            const response = await this.bot.axios.request(request)
+            const responseData = await this.makeRequest<any>(request, true, true)
 
             this.bot.logger.debug(
                 this.bot.isMobile,
                 'URL-REWARD',
-                `Received UrlReward response | offerId=${offerId} | status=${response.status}`
+                `Received UrlReward response | offerId=${offerId}`
             )
 
             const newBalance = await this.bot.browser.func.getCurrentPoints()
@@ -117,14 +166,14 @@ export class UrlReward extends Workers {
                 this.bot.logger.info(
                     this.bot.isMobile,
                     'URL-REWARD',
-                    `Completed UrlReward | offerId=${offerId} | status=${response.status} | gainedPoints=${this.gainedPoints} | newBalance=${newBalance}`,
+                    `Completed UrlReward | offerId=${offerId} | gainedPoints=${this.gainedPoints} | newBalance=${newBalance}`,
                     'green'
                 )
             } else {
                 this.bot.logger.warn(
                     this.bot.isMobile,
                     'URL-REWARD',
-                    `Failed UrlReward with no points | offerId=${offerId} | status=${response.status} | oldBalance=${this.oldBalance} | newBalance=${newBalance}`
+                    `Failed UrlReward with no points | offerId=${offerId} | oldBalance=${this.oldBalance} | newBalance=${newBalance}`
                 )
             }
 
