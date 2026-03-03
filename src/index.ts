@@ -389,23 +389,26 @@ export class MicrosoftRewardsBot {
     async Main(account: Account): Promise<{ initialPoints: number; collectedPoints: number }> {
         const accountEmail = account.email
         this.logger.info('main', 'FLOW', `Starting session for ${accountEmail}`)
-
+    
         let mobileSession: BrowserSession | null = null
         let mobileContextClosed = false
-
+    
         try {
             return await executionContext.run({ isMobile: true, account }, async () => {
                 mobileSession = await this.browserFactory.createBrowser(account)
                 const initialContext: BrowserContext = mobileSession.context
                 this.mainMobilePage = await initialContext.newPage()
-
-                // Set the browser page for HTTP requests
+    
+                // Initialize browserHTTP first
+                this.logger.info('main', 'BROWSER', `BrowserHTTP initialized for ${accountEmail}`)
+    
+                // Then set the page in BrowserFunc (which uses browserHTTP)
                 this.browser.func.setPage(this.mainMobilePage)
-
-                this.logger.info('main', 'BROWSER', `Mobile Browser started | ${accountEmail}`)
-
+    
+                this.logger.info('main', 'BROWSER', `Mobile Browser started for ${accountEmail}`)
+    
                 await this.login.login(this.mainMobilePage, account)
-
+    
                 try {
                     this.accessToken = await this.login.getAppAccessToken(this.mainMobilePage, accountEmail)
                 } catch (error) {
@@ -415,10 +418,10 @@ export class MicrosoftRewardsBot {
                         `Failed to get mobile access token: ${error instanceof Error ? error.message : String(error)}`
                     )
                 }
-
+    
                 this.cookies.mobile = await initialContext.cookies()
                 this.fingerprint = mobileSession.fingerprint
-
+    
                 const data: DashboardData = await this.browser.func.getDashboardData()
                 const appData: AppDashboardData = await this.browser.func.getAppDashboardData()
 

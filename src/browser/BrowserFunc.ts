@@ -27,8 +27,15 @@ export default class BrowserFunc {
      * Set the browser page for HTTP requests
      */
     setPage(page: Page): void {
-        this.browserHTTP.setPage(page);
-        this.bot.logger.info(this.bot.isMobile, 'BROWSER-FUNC', 'Browser page set for HTTP requests');
+        if (!this.browserHTTP) {
+            this.browserHTTP = this.bot.browserHTTP;
+        }
+        if (this.browserHTTP) {
+            this.browserHTTP.setPage(page);
+            this.bot.logger.info(this.bot.isMobile, 'BROWSER-FUNC', 'Browser page set for HTTP requests');
+        } else {
+            this.bot.logger.error(this.bot.isMobile, 'BROWSER-FUNC', 'BrowserHTTP not available');
+        }
     }
 
     /**
