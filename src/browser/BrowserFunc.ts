@@ -15,12 +15,12 @@ import type { AppDashboardData } from '../interface/AppDashBoardData'
 export default class BrowserFunc {
     private bot: MicrosoftRewardsBot
     private hostRules: HostRulesManager
-    private browserHTTP: BrowserHTTP  // Keep this - it's used
+    private browserHTTP: BrowserHTTP
 
     constructor(bot: MicrosoftRewardsBot) {
         this.bot = bot
         this.hostRules = new HostRulesManager(bot)
-        this.browserHTTP = bot.browserHTTP  // Initialize from bot
+        this.browserHTTP = bot.browserHTTP
     }
 
     /**
@@ -46,18 +46,57 @@ export default class BrowserFunc {
     }
 
     /**
-     * Fetch dashboard data using browser-based HTTP (for blocked domains)
+     * Apply host rules to a URL and get the modified version with original hostname
+     */
+    private applyHostRulesToUrl(url: string): { url: string; originalHostname?: string } {
+        return this.hostRules.applyHostRules(url);
+    }
+
+    /**
+     * Build headers with host rules
+     */
+    private buildHeadersWithHostRules(baseHeaders: any, url: string, additionalHeaders?: any): any {
+        const urlResult = this.applyHostRulesToUrl(url);
+        return this.hostRules.buildHeaders(baseHeaders, urlResult, additionalHeaders);
+    }
+
+    /**
+     * Fetch dashboard data using browser-based HTTP with host rules applied
      */
     async getDashboardDataViaBrowser(): Promise<DashboardData> {
         try {
             this.bot.logger.info(this.bot.isMobile, 'BROWSER-FUNC', 'Fetching dashboard data via browser...');
             
-            const response = await this.browserHTTP.get<any>(
+            // Apply host rules to the URL
+            const urlResult = this.applyHostRulesToUrl('https://rewards.bing.com/api/getuserinfo?type=1');
+            
+            // Build headers with host rules
+            const headers = this.buildHeadersWithHostRules(
+                {
+                    ...(this.bot.fingerprint?.headers ?? {}),
+                    Cookie: this.buildCookieHeader(this.bot.cookies.mobile, [
+                        'bing.com',
+                        'live.com',
+                        'microsoftonline.com'
+                    ])
+                },
                 'https://rewards.bing.com/api/getuserinfo?type=1'
             );
 
+            this.bot.logger.debug(
+                this.bot.isMobile,
+                'BROWSER-FUNC',
+                `Fetching dashboard via browser with URL: ${urlResult.url}`
+            );
+
+            const response = await this.browserHTTP.get<any>(urlResult.url, headers);
+
             if (response.data?.dashboard) {
-                this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', 'Dashboard data fetched successfully via browser');
+                this.bot.logger.debug(
+                    this.bot.isMobile,
+                    'BROWSER-FUNC',
+                    `Dashboard data fetched successfully via browser from ${response.url}`
+                );
                 return response.data.dashboard as DashboardData;
             }
             
@@ -73,17 +112,28 @@ export default class BrowserFunc {
     }
 
     /**
-     * Fetch app dashboard data using browser-based HTTP
+     * Fetch app dashboard data using browser-based HTTP with host rules
      */
     async getAppDashboardDataViaBrowser(): Promise<AppDashboardData> {
         try {
-            const urlResult = this.hostRules.applyHostRules('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAIOS&options=613');
+            const url = 'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAIOS&options=613';
+            const urlResult = this.applyHostRulesToUrl(url);
             
-            const response = await this.browserHTTP.get<any>(urlResult.url, {
-                'Authorization': `Bearer ${this.bot.accessToken}`,
-                'User-Agent': 'Bing/32.5.431027001 (com.microsoft.bing; build:431027001; iOS 17.6.1) Alamofire/5.10.2'
-            });
+            const headers = this.buildHeadersWithHostRules(
+                {
+                    Authorization: `Bearer ${this.bot.accessToken}`,
+                    'User-Agent': 'Bing/32.5.431027001 (com.microsoft.bing; build:431027001; iOS 17.6.1) Alamofire/5.10.2'
+                },
+                url
+            );
 
+            this.bot.logger.debug(
+                this.bot.isMobile,
+                'BROWSER-FUNC',
+                `Fetching app dashboard via browser with URL: ${urlResult.url}`
+            );
+
+            const response = await this.browserHTTP.get<any>(urlResult.url, headers);
             return response.data as AppDashboardData;
         } catch (error) {
             this.bot.logger.error(
@@ -96,17 +146,28 @@ export default class BrowserFunc {
     }
 
     /**
-     * Fetch Xbox dashboard data using browser-based HTTP
+     * Fetch Xbox dashboard data using browser-based HTTP with host rules
      */
     async getXBoxDashboardDataViaBrowser(): Promise<XboxDashboardData> {
         try {
-            const urlResult = this.hostRules.applyHostRules('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=xboxapp&options=6');
+            const url = 'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=xboxapp&options=6';
+            const urlResult = this.applyHostRulesToUrl(url);
             
-            const response = await this.browserHTTP.get<any>(urlResult.url, {
-                'Authorization': `Bearer ${this.bot.accessToken}`,
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; Xbox; Xbox One X) AppleWebKit/537.36 (KHTML, like Gecko) Edge/18.19041'
-            });
+            const headers = this.buildHeadersWithHostRules(
+                {
+                    Authorization: `Bearer ${this.bot.accessToken}`,
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; Xbox; Xbox One X) AppleWebKit/537.36 (KHTML, like Gecko) Edge/18.19041'
+                },
+                url
+            );
 
+            this.bot.logger.debug(
+                this.bot.isMobile,
+                'BROWSER-FUNC',
+                `Fetching Xbox dashboard via browser with URL: ${urlResult.url}`
+            );
+
+            const response = await this.browserHTTP.get<any>(urlResult.url, headers);
             return response.data as XboxDashboardData;
         } catch (error) {
             this.bot.logger.error(
@@ -119,19 +180,31 @@ export default class BrowserFunc {
     }
 
     /**
-     * Get app earnable points using browser-based HTTP
+     * Get app earnable points using browser-based HTTP with host rules
      */
     async getAppEarnablePointsViaBrowser(): Promise<AppEarnablePoints> {
         try {
             const eligibleOffers = ['ENUS_readarticle3_30points', 'Gamification_Sapphire_DailyCheckIn'];
-            const urlResult = this.hostRules.applyHostRules('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAAndroid&options=613');
+            const url = 'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAAndroid&options=613';
+            const urlResult = this.applyHostRulesToUrl(url);
             
-            const response = await this.browserHTTP.get<any>(urlResult.url, {
-                'Authorization': `Bearer ${this.bot.accessToken}`,
-                'X-Rewards-Country': this.bot.userData.geoLocale,
-                'X-Rewards-Language': 'en',
-                'X-Rewards-ismobile': 'true'
-            });
+            const headers = this.buildHeadersWithHostRules(
+                {
+                    Authorization: `Bearer ${this.bot.accessToken}`,
+                    'X-Rewards-Country': this.bot.userData.geoLocale,
+                    'X-Rewards-Language': 'en',
+                    'X-Rewards-ismobile': 'true'
+                },
+                url
+            );
+
+            this.bot.logger.debug(
+                this.bot.isMobile,
+                'BROWSER-FUNC',
+                `Fetching app earnable points via browser with URL: ${urlResult.url}`
+            );
+
+            const response = await this.browserHTTP.get<any>(urlResult.url, headers);
 
             const userData: AppUserData = response.data;
             const eligibleActivities = userData.response.promotions.filter(x =>
