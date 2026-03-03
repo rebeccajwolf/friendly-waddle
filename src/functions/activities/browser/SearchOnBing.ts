@@ -53,7 +53,6 @@ export class SearchOnBing extends Workers {
                     const url = config.url || '';
                     const headers = config.headers as Record<string, string> || {};
                     
-                    // Handle URLSearchParams for POST requests
                     let body = config.data;
                     if (config.data instanceof URLSearchParams) {
                         body = Object.fromEntries(config.data);
@@ -65,7 +64,6 @@ export class SearchOnBing extends Workers {
                         }
                     }
 
-                    // Make request via browser
                     let response;
                     if (method === 'POST') {
                         response = await this.bot.browserHTTP.post<T>(url, body, headers);
@@ -280,7 +278,8 @@ export class SearchOnBing extends Workers {
                 data: formData
             }
 
-            const responseData = await this.makeRequest<any>(request, true, true)
+            // Make request but we don't need to use the response data
+            await this.makeRequest<any>(request, true, true)
             
             this.bot.logger.info(
                 this.bot.isMobile,

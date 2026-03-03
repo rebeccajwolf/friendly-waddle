@@ -33,18 +33,15 @@ export class DoubleSearchPoints extends Workers {
                 );
 
                 try {
-                    // Extract method, url, headers from config
                     const method = config.method?.toUpperCase() || 'GET';
                     const url = config.url || '';
                     const headers = config.headers as Record<string, string> || {};
                     
-                    // For POST requests with URLSearchParams, convert to object
                     let body = config.data;
                     if (config.data instanceof URLSearchParams) {
                         body = Object.fromEntries(config.data);
                     }
 
-                    // Make request via browser
                     let response;
                     if (method === 'POST') {
                         response = await this.bot.browserHTTP.post<T>(url, body, headers);
@@ -144,7 +141,8 @@ export class DoubleSearchPoints extends Workers {
                 `Sending Double Search Points request | offerId=${offerId} | url=${request.url}`
             )
 
-            const responseData = await this.makeRequest<any>(request, true, true)
+            // Make request but we don't need to use the response data
+            await this.makeRequest<any>(request, true, true)
 
             this.bot.logger.debug(
                 this.bot.isMobile,

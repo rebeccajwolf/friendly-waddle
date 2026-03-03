@@ -143,7 +143,8 @@ export class FindClippy extends Workers {
                 `Sending Find Clippy request | offerId=${offerId} | url=${request.url}`
             )
 
-            const responseData = await this.makeRequest<any>(request, true, true)
+            // Make request but we don't need to use the response data
+            await this.makeRequest<any>(request, true, true)
 
             this.bot.logger.debug(
                 this.bot.isMobile,
