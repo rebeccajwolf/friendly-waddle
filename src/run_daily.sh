@@ -10,8 +10,8 @@ export TZ=${TZ}
 cd /home/user/app
 
 # Define the minimum and maximum wait times in seconds
-MINWAIT=$((2*60))  # 5 minutes
-MAXWAIT=$((3*60)) # 50 minutes
+MINWAIT=$((5*60))  # 5 minutes
+MAXWAIT=$((50*60)) # 50 minutes
 
 # Calculate a random sleep time within the specified range
 SLEEPTIME=$((MINWAIT + RANDOM % (MAXWAIT - MINWAIT)))
@@ -77,8 +77,8 @@ til(){
 echo "Sleeping for $SLEEP_MINUTES minutes ($SLEEPTIME seconds)..."
 
 # Sleep for the calculated time
-sleep $SLEEPTIME
-til $(date -d "$SLEEP_MINUTES minutes" +%H:%M)
+# sleep $SLEEPTIME
+# til $(date -d "$SLEEP_MINUTES minutes" +%H:%M)
 # Log the start of the script
 echo "Starting script..."
 
