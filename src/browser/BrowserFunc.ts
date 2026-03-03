@@ -95,7 +95,7 @@ export default class BrowserFunc {
                 this.bot.logger.debug(
                     this.bot.isMobile,
                     'BROWSER-FUNC',
-                    `Dashboard data fetched successfully via browser from ${response.url}`
+                    `Dashboard data fetched successfully via browser`
                 );
                 return response.data.dashboard as DashboardData;
             }
