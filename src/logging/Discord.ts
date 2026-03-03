@@ -39,13 +39,17 @@ export async function sendDiscord(
             await sendDiscordViaBrowser(discordUrl, content, level, originalHostname, bot);
             return;
         } catch (browserError) {
-            console.warn('[Discord] Browser send failed, falling back to axios:', browserError);
+            bot.logger.warn(
+                false,
+                'DISCORD',
+                `Browser send failed, falling back to axios: ${browserError instanceof Error ? browserError.message : String(browserError)}`
+            );
             // Fall through to axios
         }
     }
 
     // Fall back to axios
-    await sendDiscordViaAxios(discordUrl, content, level, originalHostname);
+    await sendDiscordViaAxios(discordUrl, content, level, originalHostname, bot);
 }
 
 /**
@@ -65,8 +69,6 @@ async function sendDiscordViaBrowser(
     const payload = {
         content: truncate(content),
         allowed_mentions: { parse: [] },
-        username: 'Rewards Bot',
-        avatar_url: 'https://i.imgur.com/4M34hi2.png'
     };
 
     await discordQueue.add(async () => {
@@ -77,13 +79,24 @@ async function sendDiscordViaBrowser(
             });
 
             if (response.status !== 204) {
-                console.warn(`[Discord] Browser webhook returned status: ${response.status}`);
+                bot.logger.warn(
+                    false,
+                    'DISCORD',
+                    `Browser webhook returned status: ${response.status}`
+                );
+            } else {
+                bot.logger.debug(
+                    false,
+                    'DISCORD',
+                    `Browser webhook sent successfully to ${discordUrl.substring(0, 50)}...`
+                );
             }
         } catch (err: any) {
-            console.error('[Discord] Browser webhook failed:', {
-                message: err?.message,
-                url: discordUrl.substring(0, 50) + '...'
-            });
+            bot.logger.error(
+                false,
+                'DISCORD',
+                `Browser webhook failed: ${err?.message} - URL: ${discordUrl.substring(0, 50)}...`
+            );
             throw err;
         }
     });
@@ -96,7 +109,8 @@ async function sendDiscordViaAxios(
     discordUrl: string, 
     content: string, 
     level: LogLevel, 
-    originalHostname?: string
+    originalHostname?: string,
+    bot?: MicrosoftRewardsBot
 ): Promise<void> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     if (originalHostname) {
@@ -120,17 +134,31 @@ async function sendDiscordViaAxios(
 
     await discordQueue.add(async () => {
         try {
-            await axios(request)
+            await axios(request);
+            if (bot) {
+                bot.logger.debug(
+                    false,
+                    'DISCORD',
+                    `Axios webhook sent successfully to ${discordUrl.substring(0, 50)}...`
+                );
+            }
         } catch (err: any) {
             const status = err?.response?.status
             if (status === 429) {
+                if (bot) {
+                    bot.logger.debug(false, 'DISCORD', 'Rate limited (429)');
+                }
                 return
             }
-            console.error('[Discord] Failed to send webhook:', {
-                status,
-                message: err?.message,
-                url: discordUrl.substring(0, 50) + '...'
-            })
+            
+            const errorMsg = `Failed to send webhook: ${err?.message} - Status: ${status} - URL: ${discordUrl.substring(0, 50)}...`;
+            
+            if (bot) {
+                bot.logger.error(false, 'DISCORD', errorMsg);
+            } else {
+                // Fallback to console if bot not available (shouldn't happen)
+                console.error('[Discord]', errorMsg);
+            }
         }
     })
 }
