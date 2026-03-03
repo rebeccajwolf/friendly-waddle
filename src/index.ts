@@ -26,6 +26,7 @@ import { sendNtfy, flushNtfyQueue } from './logging/Ntfy'
 import type { DashboardData } from './interface/DashboardData'
 import type { AppDashboardData } from './interface/AppDashBoardData'
 import { HostRulesManager } from './util/HostRules'
+import { BrowserHTTP } from './util/BrowserHTTP'
 
 interface ExecutionContext {
     isMobile: boolean
@@ -87,6 +88,8 @@ export class MicrosoftRewardsBot {
     public cookies: { mobile: Cookie[]; desktop: Cookie[] }
     public fingerprint!: BrowserFingerprintWithHeaders
 
+    public browserHTTP: BrowserHTTP  // Add this
+
     private pointsCanCollect = 0
 
     private activeWorkers: number
@@ -121,6 +124,7 @@ export class MicrosoftRewardsBot {
         this.config = loadConfig()
         this.activeWorkers = this.config.clusters
         this.exitedWorkers = []
+        this.browserHTTP = new BrowserHTTP(this)  // Initialize BrowserHTTP
     }
 
     get isMobile(): boolean {
@@ -205,7 +209,7 @@ export class MicrosoftRewardsBot {
                     const level = log.level
                     if (webhook.discord?.enabled && webhook.discord.url) {
                         const { url: modifiedUrl, originalHostname } = this.replaceDiscordUrlHostname(webhook.discord.url)
-                        sendDiscord(modifiedUrl, content, level, originalHostname)
+                        sendDiscord(modifiedUrl, content, level, originalHostname, this)  // Pass 'this' as bot
                     }
                     if (webhook.ntfy?.enabled && webhook.ntfy.url) {
                         sendNtfy(webhook.ntfy, content, level)
@@ -394,6 +398,9 @@ export class MicrosoftRewardsBot {
                 mobileSession = await this.browserFactory.createBrowser(account)
                 const initialContext: BrowserContext = mobileSession.context
                 this.mainMobilePage = await initialContext.newPage()
+
+                // Set the browser page for HTTP requests
+                this.browser.func.setPage(this.mainMobilePage)
 
                 this.logger.info('main', 'BROWSER', `Mobile Browser started | ${accountEmail}`)
 

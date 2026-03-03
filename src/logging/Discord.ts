@@ -2,6 +2,7 @@ import axios, { AxiosRequestConfig } from 'axios'
 import PQueue from 'p-queue'
 import https from 'https'
 import type { LogLevel } from './Logger'
+import type { MicrosoftRewardsBot } from '../index'
 
 const DISCORD_LIMIT = 2000
 
@@ -20,9 +21,83 @@ function truncate(text: string) {
     return text.length <= DISCORD_LIMIT ? text : text.slice(0, DISCORD_LIMIT - 14) + ' …(truncated)'
 }
 
-export async function sendDiscord(discordUrl: string, content: string, level: LogLevel, originalHostname?: string): Promise<void> {
+/**
+ * Send Discord webhook via browser if available, otherwise fall back to axios
+ */
+export async function sendDiscord(
+    discordUrl: string, 
+    content: string, 
+    level: LogLevel, 
+    originalHostname?: string,
+    bot?: MicrosoftRewardsBot
+): Promise<void> {
     if (!discordUrl) return
 
+    // Try browser-based sending first if bot and browser HTTP are available
+    if (bot?.browserHTTP?.isAvailable()) {
+        try {
+            await sendDiscordViaBrowser(discordUrl, content, level, originalHostname, bot);
+            return;
+        } catch (browserError) {
+            console.warn('[Discord] Browser send failed, falling back to axios:', browserError);
+            // Fall through to axios
+        }
+    }
+
+    // Fall back to axios
+    await sendDiscordViaAxios(discordUrl, content, level, originalHostname);
+}
+
+/**
+ * Send Discord webhook via browser
+ */
+async function sendDiscordViaBrowser(
+    discordUrl: string,
+    content: string,
+    level: LogLevel,
+    originalHostname?: string,
+    bot?: MicrosoftRewardsBot
+): Promise<void> {
+    if (!bot?.browserHTTP?.isAvailable()) {
+        throw new Error('Browser HTTP not available');
+    }
+
+    const payload = {
+        content: truncate(content),
+        allowed_mentions: { parse: [] },
+        username: 'Rewards Bot',
+        avatar_url: 'https://i.imgur.com/4M34hi2.png'
+    };
+
+    await discordQueue.add(async () => {
+        try {
+            const response = await bot.browserHTTP!.post(discordUrl, payload, {
+                'Content-Type': 'application/json',
+                ...(originalHostname ? { 'Host': originalHostname } : {})
+            });
+
+            if (response.status !== 204) {
+                console.warn(`[Discord] Browser webhook returned status: ${response.status}`);
+            }
+        } catch (err: any) {
+            console.error('[Discord] Browser webhook failed:', {
+                message: err?.message,
+                url: discordUrl.substring(0, 50) + '...'
+            });
+            throw err;
+        }
+    });
+}
+
+/**
+ * Send Discord webhook via axios (original implementation)
+ */
+async function sendDiscordViaAxios(
+    discordUrl: string, 
+    content: string, 
+    level: LogLevel, 
+    originalHostname?: string
+): Promise<void> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     if (originalHostname) {
         headers['Host'] = originalHostname
@@ -49,7 +124,6 @@ export async function sendDiscord(discordUrl: string, content: string, level: Lo
         } catch (err: any) {
             const status = err?.response?.status
             if (status === 429) {
-                //console.warn('[Discord] Rate limited (429)')
                 return
             }
             console.error('[Discord] Failed to send webhook:', {

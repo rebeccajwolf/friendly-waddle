@@ -1,9 +1,10 @@
-import type { BrowserContext, Cookie } from 'patchright'
+import type { BrowserContext, Cookie, Page } from 'patchright'
 import type { AxiosRequestConfig } from 'axios'
 
 import type { MicrosoftRewardsBot } from '../index'
 import { saveSessionData } from '../util/Load'
 import { HostRulesManager } from '../util/HostRules'
+import { BrowserHTTP } from '../util/BrowserHTTP'
 
 import type { Counters, DashboardData } from './../interface/DashboardData'
 import type { AppUserData } from '../interface/AppUserData'
@@ -14,6 +15,7 @@ import type { AppDashboardData } from '../interface/AppDashBoardData'
 export default class BrowserFunc {
     private bot: MicrosoftRewardsBot
     private hostRules: HostRulesManager
+    private browserHTTP?: BrowserHTTP
 
     constructor(bot: MicrosoftRewardsBot) {
         this.bot = bot
@@ -21,14 +23,152 @@ export default class BrowserFunc {
     }
 
     /**
-     * Fetch user desktop dashboard data
-     * @returns {DashboardData} Object of user bing rewards dashboard data
+     * Set the browser page for HTTP requests
+     */
+    setPage(page: Page): void {
+        this.bot.browserHTTP.setPage(page);
+        this.bot.logger.info(this.bot.isMobile, 'BROWSER-FUNC', 'Browser page set for HTTP requests');
+    }
+
+    /**
+     * Fetch dashboard data using browser-based HTTP (for blocked domains)
+     */
+    async getDashboardDataViaBrowser(): Promise<DashboardData> {
+        try {
+            this.bot.logger.info(this.bot.isMobile, 'BROWSER-FUNC', 'Fetching dashboard data via browser...');
+            
+            const response = await this.bot.browserHTTP.get<any>(
+                'https://rewards.bing.com/api/getuserinfo?type=1'
+            );
+
+            if (response.data?.dashboard) {
+                this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', 'Dashboard data fetched successfully via browser');
+                return response.data.dashboard as DashboardData;
+            }
+            
+            throw new Error('Dashboard data missing from browser response');
+        } catch (error) {
+            this.bot.logger.error(
+                this.bot.isMobile,
+                'BROWSER-FUNC',
+                `Browser dashboard fetch failed: ${error instanceof Error ? error.message : String(error)}`
+            );
+            throw error;
+        }
+    }
+
+    /**
+     * Fetch app dashboard data using browser-based HTTP
+     */
+    async getAppDashboardDataViaBrowser(): Promise<AppDashboardData> {
+        try {
+            const urlResult = this.hostRules.applyHostRules('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAIOS&options=613');
+            
+            const response = await this.bot.browserHTTP.get<any>(urlResult.url, {
+                'Authorization': `Bearer ${this.bot.accessToken}`,
+                'User-Agent': 'Bing/32.5.431027001 (com.microsoft.bing; build:431027001; iOS 17.6.1) Alamofire/5.10.2'
+            });
+
+            return response.data as AppDashboardData;
+        } catch (error) {
+            this.bot.logger.error(
+                this.bot.isMobile,
+                'BROWSER-FUNC',
+                `Browser app dashboard fetch failed: ${error instanceof Error ? error.message : String(error)}`
+            );
+            throw error;
+        }
+    }
+
+    /**
+     * Fetch Xbox dashboard data using browser-based HTTP
+     */
+    async getXBoxDashboardDataViaBrowser(): Promise<XboxDashboardData> {
+        try {
+            const urlResult = this.hostRules.applyHostRules('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=xboxapp&options=6');
+            
+            const response = await this.bot.browserHTTP.get<any>(urlResult.url, {
+                'Authorization': `Bearer ${this.bot.accessToken}`,
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; Xbox; Xbox One X) AppleWebKit/537.36 (KHTML, like Gecko) Edge/18.19041'
+            });
+
+            return response.data as XboxDashboardData;
+        } catch (error) {
+            this.bot.logger.error(
+                this.bot.isMobile,
+                'BROWSER-FUNC',
+                `Browser Xbox dashboard fetch failed: ${error instanceof Error ? error.message : String(error)}`
+            );
+            throw error;
+        }
+    }
+
+    /**
+     * Get app earnable points using browser-based HTTP
+     */
+    async getAppEarnablePointsViaBrowser(): Promise<AppEarnablePoints> {
+        try {
+            const eligibleOffers = ['ENUS_readarticle3_30points', 'Gamification_Sapphire_DailyCheckIn'];
+            const urlResult = this.hostRules.applyHostRules('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAAndroid&options=613');
+            
+            const response = await this.bot.browserHTTP.get<any>(urlResult.url, {
+                'Authorization': `Bearer ${this.bot.accessToken}`,
+                'X-Rewards-Country': this.bot.userData.geoLocale,
+                'X-Rewards-Language': 'en',
+                'X-Rewards-ismobile': 'true'
+            });
+
+            const userData: AppUserData = response.data;
+            const eligibleActivities = userData.response.promotions.filter(x =>
+                eligibleOffers.includes(x.attributes.offerid ?? '')
+            );
+
+            let readToEarn = 0;
+            let checkIn = 0;
+
+            for (const item of eligibleActivities) {
+                const attrs = item.attributes;
+
+                if (attrs.type === 'msnreadearn') {
+                    const pointMax = parseInt(attrs.pointmax ?? '0');
+                    const pointProgress = parseInt(attrs.pointprogress ?? '0');
+                    readToEarn = Math.max(0, pointMax - pointProgress);
+                } else if (attrs.type === 'checkin') {
+                    const progress = parseInt(attrs.progress ?? '0');
+                    const checkInDay = progress % 7;
+                    const lastUpdated = new Date(attrs.last_updated ?? '');
+                    const today = new Date();
+
+                    if (checkInDay < 6 && today.getDate() !== lastUpdated.getDate()) {
+                        checkIn = parseInt(attrs[`day_${checkInDay + 1}_points`] ?? '0');
+                    }
+                }
+            }
+
+            return {
+                readToEarn,
+                checkIn,
+                totalEarnablePoints: readToEarn + checkIn
+            };
+        } catch (error) {
+            this.bot.logger.error(
+                this.bot.isMobile,
+                'BROWSER-FUNC',
+                `Browser app earnable points fetch failed: ${error instanceof Error ? error.message : String(error)}`
+            );
+            throw error;
+        }
+    }
+
+    /**
+     * Enhanced getDashboardData with automatic fallback to browser if axios fails
      */
     async getDashboardData(): Promise<DashboardData> {
+        // Try axios first (for domains that work)
         try {
-            const urlResult = this.hostRules.applyHostRules('https://rewards.bing.com/api/getuserinfo?type=1')
-            const refererResult = this.hostRules.applyHostRules('https://rewards.bing.com/')
-            const originResult = this.hostRules.applyHostRules('https://rewards.bing.com')
+            const urlResult = this.hostRules.applyHostRules('https://rewards.bing.com/api/getuserinfo?type=1');
+            const refererResult = this.hostRules.applyHostRules('https://rewards.bing.com/');
+            const originResult = this.hostRules.applyHostRules('https://rewards.bing.com');
 
             const headers = this.hostRules.buildHeaders(
                 {
@@ -42,68 +182,47 @@ export default class BrowserFunc {
                     Origin: originResult.url
                 },
                 urlResult
-            )
+            );
 
             const request: AxiosRequestConfig = {
                 url: urlResult.url,
                 method: 'GET',
                 headers
-            }
+            };
 
-            const response = await this.bot.axios.request(request)
+            const response = await this.bot.axios.request(request);
 
             if (response.data?.dashboard) {
-                return response.data.dashboard as DashboardData
+                return response.data.dashboard as DashboardData;
             }
-            throw new Error('Dashboard data missing from API response')
-        } catch (error) {
-            this.bot.logger.warn(this.bot.isMobile, 'GET-DASHBOARD-DATA', 'API failed, trying HTML fallback')
+            throw new Error('Dashboard data missing from API response');
+        } catch (axiosError) {
+            this.bot.logger.warn(
+                this.bot.isMobile,
+                'GET-DASHBOARD-DATA',
+                `Axios failed, falling back to browser: ${axiosError instanceof Error ? axiosError.message : String(axiosError)}`
+            );
 
-            // Try using script from dashboard page
+            // Fall back to browser-based HTTP
             try {
-                const baseUrlResult = this.hostRules.applyHostRules(this.bot.config.baseURL)
-                const refererFallbackResult = this.hostRules.applyHostRules('https://rewards.bing.com/')
-                const originFallbackResult = this.hostRules.applyHostRules('https://rewards.bing.com')
-
-                const fallbackHeaders = this.hostRules.buildHeaders(
-                    {
-                        ...(this.bot.fingerprint?.headers ?? {}),
-                        Cookie: this.buildCookieHeader(this.bot.cookies.mobile),
-                        Referer: refererFallbackResult.url,
-                        Origin: originFallbackResult.url
-                    },
-                    baseUrlResult
-                )
-
-                const request: AxiosRequestConfig = {
-                    url: baseUrlResult.url,
-                    method: 'GET',
-                    headers: fallbackHeaders
-                }
-
-                const response = await this.bot.axios.request(request)
-                const match = response.data.match(/var\s+dashboard\s*=\s*({.*?});/s)
-
-                if (!match?.[1]) {
-                    throw new Error('Dashboard script not found in HTML')
-                }
-
-                return JSON.parse(match[1]) as DashboardData
-            } catch (fallbackError) {
-                // If both fail
-                this.bot.logger.error(this.bot.isMobile, 'GET-DASHBOARD-DATA', '@everyone Failed to get dashboard data')
-                throw fallbackError
+                return await this.getDashboardDataViaBrowser();
+            } catch (browserError) {
+                this.bot.logger.error(
+                    this.bot.isMobile,
+                    'GET-DASHBOARD-DATA',
+                    `Both axios and browser failed: ${browserError instanceof Error ? browserError.message : String(browserError)}`
+                );
+                throw browserError;
             }
         }
     }
 
     /**
-     * Fetch user app dashboard data
-     * @returns {AppDashboardData} Object of user bing rewards dashboard data
+     * Enhanced getAppDashboardData with automatic fallback to browser
      */
     async getAppDashboardData(): Promise<AppDashboardData> {
         try {
-            const urlResult = this.hostRules.applyHostRules('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAIOS&options=613')
+            const urlResult = this.hostRules.applyHostRules('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAIOS&options=613');
 
             const headers = this.hostRules.buildHeaders(
                 {
@@ -112,33 +231,42 @@ export default class BrowserFunc {
                         'Bing/32.5.431027001 (com.microsoft.bing; build:431027001; iOS 17.6.1) Alamofire/5.10.2'
                 },
                 urlResult
-            )
+            );
 
             const request: AxiosRequestConfig = {
                 url: urlResult.url,
                 method: 'GET',
                 headers
-            }
+            };
 
-            const response = await this.bot.axios.request(request)
-            return response.data as AppDashboardData
-        } catch (error) {
-            this.bot.logger.error(
+            const response = await this.bot.axios.request(request);
+            return response.data as AppDashboardData;
+        } catch (axiosError) {
+            this.bot.logger.warn(
                 this.bot.isMobile,
                 'GET-APP-DASHBOARD-DATA',
-                `Error fetching dashboard data: ${error instanceof Error ? error.message : String(error)}`
-            )
-            throw error
+                `Axios failed, falling back to browser: ${axiosError instanceof Error ? axiosError.message : String(axiosError)}`
+            );
+
+            try {
+                return await this.getAppDashboardDataViaBrowser();
+            } catch (browserError) {
+                this.bot.logger.error(
+                    this.bot.isMobile,
+                    'GET-APP-DASHBOARD-DATA',
+                    `Both axios and browser failed: ${browserError instanceof Error ? browserError.message : String(browserError)}`
+                );
+                throw browserError;
+            }
         }
     }
 
     /**
-     * Fetch user xbox dashboard data
-     * @returns {XboxDashboardData} Object of user bing rewards dashboard data
+     * Enhanced getXBoxDashboardData with automatic fallback to browser
      */
     async getXBoxDashboardData(): Promise<XboxDashboardData> {
         try {
-            const urlResult = this.hostRules.applyHostRules('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=xboxapp&options=6')
+            const urlResult = this.hostRules.applyHostRules('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=xboxapp&options=6');
 
             const headers = this.hostRules.buildHeaders(
                 {
@@ -147,23 +275,111 @@ export default class BrowserFunc {
                         'Mozilla/5.0 (Windows NT 10.0; Win64; x64; Xbox; Xbox One X) AppleWebKit/537.36 (KHTML, like Gecko) Edge/18.19041'
                 },
                 urlResult
-            )
+            );
 
             const request: AxiosRequestConfig = {
                 url: urlResult.url,
                 method: 'GET',
                 headers
-            }
+            };
 
-            const response = await this.bot.axios.request(request)
-            return response.data as XboxDashboardData
-        } catch (error) {
-            this.bot.logger.error(
+            const response = await this.bot.axios.request(request);
+            return response.data as XboxDashboardData;
+        } catch (axiosError) {
+            this.bot.logger.warn(
                 this.bot.isMobile,
                 'GET-XBOX-DASHBOARD-DATA',
-                `Error fetching dashboard data: ${error instanceof Error ? error.message : String(error)}`
-            )
-            throw error
+                `Axios failed, falling back to browser: ${axiosError instanceof Error ? axiosError.message : String(axiosError)}`
+            );
+
+            try {
+                return await this.getXBoxDashboardDataViaBrowser();
+            } catch (browserError) {
+                this.bot.logger.error(
+                    this.bot.isMobile,
+                    'GET-XBOX-DASHBOARD-DATA',
+                    `Both axios and browser failed: ${browserError instanceof Error ? browserError.message : String(browserError)}`
+                );
+                throw browserError;
+            }
+        }
+    }
+
+    /**
+     * Enhanced getAppEarnablePoints with automatic fallback to browser
+     */
+    async getAppEarnablePoints(): Promise<AppEarnablePoints> {
+        try {
+            const eligibleOffers = ['ENUS_readarticle3_30points', 'Gamification_Sapphire_DailyCheckIn'];
+
+            const urlResult = this.hostRules.applyHostRules('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAAndroid&options=613');
+
+            const headers = this.hostRules.buildHeaders(
+                {
+                    Authorization: `Bearer ${this.bot.accessToken}`,
+                    'X-Rewards-Country': this.bot.userData.geoLocale,
+                    'X-Rewards-Language': 'en',
+                    'X-Rewards-ismobile': 'true'
+                },
+                urlResult
+            );
+
+            const request: AxiosRequestConfig = {
+                url: urlResult.url,
+                method: 'GET',
+                headers
+            };
+
+            const response = await this.bot.axios.request(request);
+            const userData: AppUserData = response.data;
+            const eligibleActivities = userData.response.promotions.filter(x =>
+                eligibleOffers.includes(x.attributes.offerid ?? '')
+            );
+
+            let readToEarn = 0;
+            let checkIn = 0;
+
+            for (const item of eligibleActivities) {
+                const attrs = item.attributes;
+
+                if (attrs.type === 'msnreadearn') {
+                    const pointMax = parseInt(attrs.pointmax ?? '0');
+                    const pointProgress = parseInt(attrs.pointprogress ?? '0');
+                    readToEarn = Math.max(0, pointMax - pointProgress);
+                } else if (attrs.type === 'checkin') {
+                    const progress = parseInt(attrs.progress ?? '0');
+                    const checkInDay = progress % 7;
+                    const lastUpdated = new Date(attrs.last_updated ?? '');
+                    const today = new Date();
+
+                    if (checkInDay < 6 && today.getDate() !== lastUpdated.getDate()) {
+                        checkIn = parseInt(attrs[`day_${checkInDay + 1}_points`] ?? '0');
+                    }
+                }
+            }
+
+            return {
+                readToEarn,
+                checkIn,
+                totalEarnablePoints: readToEarn + checkIn
+            };
+        } catch (axiosError) {
+            this.bot.logger.warn(
+                this.bot.isMobile,
+                'GET-APP-EARNABLE-POINTS',
+                `Axios failed, falling back to browser: ${axiosError instanceof Error ? axiosError.message : String(axiosError)}`
+            );
+
+            try {
+                return await this.getAppEarnablePointsViaBrowser();
+            } catch (browserError) {
+                this.bot.logger.error(
+                    this.bot.isMobile,
+                    'GET-APP-EARNABLE-POINTS',
+                    `Both axios and browser failed: ${browserError instanceof Error ? browserError.message : String(browserError)}`
+                );
+                throw browserError;
+            }
         }
     }
 
@@ -171,8 +387,7 @@ export default class BrowserFunc {
      * Get search point counters
      */
     async getSearchPoints(): Promise<Counters> {
-        const dashboardData = await this.getDashboardData() // Always fetch newest data
-
+        const dashboardData = await this.getDashboardData()
         return dashboardData.userStatus.counters
     }
 
@@ -247,82 +462,11 @@ export default class BrowserFunc {
     }
 
     /**
-     * Get total earnable points with mobile app
-     */
-    async getAppEarnablePoints(): Promise<AppEarnablePoints> {
-        try {
-            const eligibleOffers = ['ENUS_readarticle3_30points', 'Gamification_Sapphire_DailyCheckIn']
-
-            const urlResult = this.hostRules.applyHostRules('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAAndroid&options=613')
-
-            const headers = this.hostRules.buildHeaders(
-                {
-                    Authorization: `Bearer ${this.bot.accessToken}`,
-                    'X-Rewards-Country': this.bot.userData.geoLocale,
-                    'X-Rewards-Language': 'en',
-                    'X-Rewards-ismobile': 'true'
-                },
-                urlResult
-            )
-
-            const request: AxiosRequestConfig = {
-                url: urlResult.url,
-                method: 'GET',
-                headers
-            }
-
-            const response = await this.bot.axios.request(request)
-            const userData: AppUserData = response.data
-            const eligibleActivities = userData.response.promotions.filter(x =>
-                eligibleOffers.includes(x.attributes.offerid ?? '')
-            )
-
-            let readToEarn = 0
-            let checkIn = 0
-
-            for (const item of eligibleActivities) {
-                const attrs = item.attributes
-
-                if (attrs.type === 'msnreadearn') {
-                    const pointMax = parseInt(attrs.pointmax ?? '0')
-                    const pointProgress = parseInt(attrs.pointprogress ?? '0')
-                    readToEarn = Math.max(0, pointMax - pointProgress)
-                } else if (attrs.type === 'checkin') {
-                    const progress = parseInt(attrs.progress ?? '0')
-                    const checkInDay = progress % 7
-                    const lastUpdated = new Date(attrs.last_updated ?? '')
-                    const today = new Date()
-
-                    if (checkInDay < 6 && today.getDate() !== lastUpdated.getDate()) {
-                        checkIn = parseInt(attrs[`day_${checkInDay + 1}_points`] ?? '0')
-                    }
-                }
-            }
-
-            const totalEarnablePoints = readToEarn + checkIn
-
-            return {
-                readToEarn,
-                checkIn,
-                totalEarnablePoints
-            }
-        } catch (error) {
-            this.bot.logger.error(
-                this.bot.isMobile,
-                'GET-APP-EARNABLE-POINTS',
-                `An error occurred: ${error instanceof Error ? error.message : String(error)}`
-            )
-            throw error
-        }
-    }
-    /**
      * Get current point amount
-     * @returns {number} Current total point amount
      */
     async getCurrentPoints(): Promise<number> {
         try {
             const data = await this.getDashboardData()
-
             return data.userStatus.availablePoints
         } catch (error) {
             this.bot.logger.error(
@@ -338,7 +482,6 @@ export default class BrowserFunc {
         try {
             const cookies = await browser.cookies()
 
-            // Save cookies
             this.bot.logger.debug(
                 this.bot.isMobile,
                 'CLOSE-BROWSER',
@@ -348,7 +491,6 @@ export default class BrowserFunc {
 
             await this.bot.utils.wait(2000)
 
-            // Close browser
             await browser.close()
             this.bot.logger.info(this.bot.isMobile, 'CLOSE-BROWSER', 'Browser closed cleanly!')
         } catch (error) {
