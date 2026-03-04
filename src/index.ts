@@ -88,7 +88,7 @@ export class MicrosoftRewardsBot {
     public cookies: { mobile: Cookie[]; desktop: Cookie[] }
     public fingerprint!: BrowserFingerprintWithHeaders
 
-    public browserHTTP: BrowserHTTP  // Add this
+    public browserHTTP: BrowserHTTP
 
     private pointsCanCollect = 0
 
@@ -124,7 +124,7 @@ export class MicrosoftRewardsBot {
         this.config = loadConfig()
         this.activeWorkers = this.config.clusters
         this.exitedWorkers = []
-        this.browserHTTP = new BrowserHTTP(this)  // Initialize BrowserHTTP
+        this.browserHTTP = new BrowserHTTP(this)
     }
 
     get isMobile(): boolean {
@@ -209,7 +209,7 @@ export class MicrosoftRewardsBot {
                     const level = log.level
                     if (webhook.discord?.enabled && webhook.discord.url) {
                         const { url: modifiedUrl, originalHostname } = this.replaceDiscordUrlHostname(webhook.discord.url)
-                        sendDiscord(modifiedUrl, content, level, originalHostname, this)  // Pass 'this' as bot
+                        sendDiscord(modifiedUrl, content, level, originalHostname, this)
                     }
                     if (webhook.ntfy?.enabled && webhook.ntfy.url) {
                         sendNtfy(webhook.ntfy, content, level)
@@ -410,10 +410,10 @@ export class MicrosoftRewardsBot {
     
                 this.logger.info('main', 'BROWSER', `Mobile Browser started for ${accountEmail}`)
     
-                // Log queue stats after browser is ready
+                // Log queue stats after browser is ready - FIXED: Changed this.bot to this
                 const queueStats = this.browserHTTP.getQueueStats();
                 this.logger.info(
-                    this.bot.isMobile,
+                    this.isMobile,
                     'BROWSER',
                     `📊 BrowserHTTP queue stats: Processed=${queueStats.totalProcessed}, Failed=${queueStats.totalFailed}, Queue=${queueStats.currentQueueSize}`
                 );
