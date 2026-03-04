@@ -410,13 +410,19 @@ export class MicrosoftRewardsBot {
     
                 this.logger.info('main', 'BROWSER', `Mobile Browser started for ${accountEmail}`)
     
-                // Log queue stats after browser is ready - FIXED: Changed this.bot to this
+                // Log queue stats after browser is ready
                 const queueStats = this.browserHTTP.getQueueStats();
                 this.logger.info(
                     this.isMobile,
                     'BROWSER',
                     `📊 BrowserHTTP queue stats: Processed=${queueStats.totalProcessed}, Failed=${queueStats.totalFailed}, Queue=${queueStats.currentQueueSize}`
                 );
+    
+                // IMPORTANT: Process any queued master requests now that browser is ready
+                if (cluster.isWorker) {
+                    const { processMasterQueue } = await import('./logging/Discord');
+                    processMasterQueue(this);
+                }
     
                 await this.login.login(this.mainMobilePage, account)
     

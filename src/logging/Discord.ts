@@ -16,13 +16,56 @@ const discordQueue = new PQueue({
     carryoverConcurrencyCount: true
 })
 
+// Global queue for master process requests
+const masterRequestQueue: Array<{
+    discordUrl: string;
+    content: string;
+    level: LogLevel;
+    originalHostname?: string;
+    resolve: () => void;
+    reject: (error: Error) => void;
+}> = [];
+
+let isProcessingMasterQueue = false;
+
 function truncate(text: string) {
     return text.length <= DISCORD_LIMIT ? text : text.slice(0, DISCORD_LIMIT - 14) + ' …(truncated)'
 }
 
 /**
- * Send Discord webhook - ALWAYS uses browser HTTP with queuing
- * Master process will queue requests for workers to handle
+ * Process master queue - called by workers when they're ready
+ */
+export function processMasterQueue(bot: MicrosoftRewardsBot): void {
+    if (!cluster.isWorker) return;
+    
+    if (masterRequestQueue.length === 0) return;
+    
+    bot.logger.info(
+        false,
+        'DISCORD',
+        `📦 Worker ${process.pid} processing ${masterRequestQueue.length} queued master requests`
+    );
+    
+    while (masterRequestQueue.length > 0) {
+        const request = masterRequestQueue.shift();
+        if (request) {
+            sendDiscordViaBrowser(
+                request.discordUrl,
+                request.content,
+                request.level,
+                request.originalHostname,
+                bot
+            ).then(() => {
+                request.resolve();
+            }).catch((error) => {
+                request.reject(error);
+            });
+        }
+    }
+}
+
+/**
+ * Send Discord webhook - Master queues, workers execute via browser
  */
 export async function sendDiscord(
     discordUrl: string, 
@@ -36,35 +79,56 @@ export async function sendDiscord(
     const processType = cluster.isWorker ? 'worker' : 'master';
     const pid = process.pid;
 
-    // Log initial attempt
-    if (bot) {
-        bot.logger.info(
-            false,
-            'DISCORD',
-            `📤 Discord webhook triggered in ${processType} (PID: ${pid}) - URL: ${discordUrl.substring(0, 50)}...`
-        );
+    // If we're in master process, queue the request for workers
+    if (!cluster.isWorker) {
+        return new Promise((resolve, reject) => {
+            masterRequestQueue.push({
+                discordUrl,
+                content,
+                level,
+                originalHostname,
+                resolve,
+                reject
+            });
+            
+            if (bot) {
+                bot.logger.info(
+                    false,
+                    'DISCORD',
+                    `📥 Discord webhook queued in master (PID: ${pid}) - Queue size: ${masterRequestQueue.length}`
+                );
+            }
+        });
     }
 
-    // ALWAYS use browser HTTP - it will queue if not ready
+    // We're in a worker process - execute via browser
+    if (!bot) {
+        throw new Error('Bot instance required for browser requests in worker');
+    }
+
+    // Log initial attempt
+    bot.logger.info(
+        false,
+        'DISCORD',
+        `📤 Discord webhook triggered in worker (PID: ${pid}) - URL: ${discordUrl.substring(0, 50)}...`
+    );
+
+    // Always use browser HTTP - it will queue if not ready
     try {
         await sendDiscordViaBrowser(discordUrl, content, level, originalHostname, bot);
         
-        if (bot) {
-            bot.logger.info(
-                false,
-                'DISCORD',
-                `✅ Discord webhook sent successfully via browser in ${processType} ${pid}`,
-                'green'
-            );
-        }
+        bot.logger.info(
+            false,
+            'DISCORD',
+            `✅ Discord webhook sent successfully via browser in worker ${pid}`,
+            'green'
+        );
     } catch (error) {
-        if (bot) {
-            bot.logger.error(
-                false,
-                'DISCORD',
-                `❌ Discord webhook failed in ${processType} ${pid}: ${error instanceof Error ? error.message : String(error)}`
-            );
-        }
+        bot.logger.error(
+            false,
+            'DISCORD',
+            `❌ Discord webhook failed in worker ${pid}: ${error instanceof Error ? error.message : String(error)}`
+        );
         throw error;
     }
 }
@@ -84,7 +148,6 @@ async function sendDiscordViaBrowser(
     }
 
     const pid = process.pid;
-    const processType = cluster.isWorker ? 'worker' : 'master';
 
     // Log queue stats before attempt
     const queueStats = bot.browserHTTP.getQueueStats();
@@ -105,7 +168,7 @@ async function sendDiscordViaBrowser(
             bot.logger.debug(
                 false,
                 'DISCORD',
-                `🔄 Sending Discord webhook via browser in ${processType} ${pid} (will queue if browser not ready)`
+                `🔄 Sending Discord webhook via browser in worker ${pid} (will queue if browser not ready)`
             );
 
             const startTime = Date.now();
@@ -122,20 +185,20 @@ async function sendDiscordViaBrowser(
                 bot.logger.warn(
                     false,
                     'DISCORD',
-                    `⚠️ Discord webhook in ${processType} ${pid} returned unexpected status: ${response.status} (${duration}ms)`
+                    `⚠️ Discord webhook in worker ${pid} returned unexpected status: ${response.status} (${duration}ms)`
                 );
             } else {
                 bot.logger.debug(
                     false,
                     'DISCORD',
-                    `✅ Discord webhook in ${processType} ${pid} succeeded (${duration}ms)`
+                    `✅ Discord webhook in worker ${pid} succeeded (${duration}ms)`
                 );
             }
         } catch (err: any) {
             bot.logger.error(
                 false,
                 'DISCORD',
-                `❌ Discord webhook failed in ${processType} ${pid}: ${err?.message}`
+                `❌ Discord webhook failed in worker ${pid}: ${err?.message}`
             );
             throw err;
         }
