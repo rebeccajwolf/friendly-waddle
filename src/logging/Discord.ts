@@ -26,8 +26,6 @@ const masterRequestQueue: Array<{
     reject: (error: Error) => void;
 }> = [];
 
-let isProcessingMasterQueue = false;
-
 function truncate(text: string) {
     return text.length <= DISCORD_LIMIT ? text : text.slice(0, DISCORD_LIMIT - 14) + ' …(truncated)'
 }
@@ -76,7 +74,6 @@ export async function sendDiscord(
 ): Promise<void> {
     if (!discordUrl) return
 
-    const processType = cluster.isWorker ? 'worker' : 'master';
     const pid = process.pid;
 
     // If we're in master process, queue the request for workers

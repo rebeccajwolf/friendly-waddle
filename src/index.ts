@@ -420,8 +420,11 @@ export class MicrosoftRewardsBot {
     
                 // IMPORTANT: Process any queued master requests now that browser is ready
                 if (cluster.isWorker) {
-                    const { processMasterQueue } = await import('./logging/Discord');
-                    processMasterQueue(this);
+                    // Dynamically import to avoid circular dependency
+                    const discordModule = await import('./logging/Discord');
+                    if (discordModule.processMasterQueue) {
+                        discordModule.processMasterQueue(this);
+                    }
                 }
     
                 await this.login.login(this.mainMobilePage, account)
@@ -441,7 +444,7 @@ export class MicrosoftRewardsBot {
     
                 const data: DashboardData = await this.browser.func.getDashboardData()
                 const appData: AppDashboardData = await this.browser.func.getAppDashboardData()
-
+    
                 // Set geo
                 this.userData.geoLocale =
                     account.geoLocale === 'auto' ? data.userProfile.attributes.country : account.geoLocale.toLowerCase()
@@ -452,16 +455,16 @@ export class MicrosoftRewardsBot {
                         `The provided geoLocale is longer than 2 (${this.userData.geoLocale} | auto=${account.geoLocale === 'auto'}), this is likely invalid and can cause errors!`
                     )
                 }
-
+    
                 this.userData.initialPoints = data.userStatus.availablePoints
                 this.userData.currentPoints = data.userStatus.availablePoints
                 const initialPoints = this.userData.initialPoints ?? 0
-
+    
                 const browserEarnable = await this.browser.func.getBrowserEarnablePoints()
                 const appEarnable = await this.browser.func.getAppEarnablePoints()
-
+    
                 this.pointsCanCollect = browserEarnable.mobileSearchPoints + (appEarnable?.totalEarnablePoints ?? 0)
-
+    
                 this.logger.info(
                     'main',
                     'POINTS',
@@ -469,7 +472,7 @@ export class MicrosoftRewardsBot {
                         browserEarnable.mobileSearchPoints
                     } | App: ${appEarnable?.totalEarnablePoints ?? 0} | ${accountEmail} | locale: ${this.userData.geoLocale}`
                 )
-
+    
                 if (this.config.workers.doAppPromotions) await this.workers.doAppPromotions(appData)
                 if (this.config.workers.doDailySet) await this.workers.doDailySet(data, this.mainMobilePage)
                 if (this.config.workers.doSpecialPromotions) await this.workers.doSpecialPromotions(data)
@@ -477,12 +480,12 @@ export class MicrosoftRewardsBot {
                 if (this.config.workers.doDailyCheckIn) await this.activities.doDailyCheckIn()
                 if (this.config.workers.doReadToEarn) await this.activities.doReadToEarn()
                 if (this.config.workers.doPunchCards) await this.workers.doPunchCards(data, this.mainMobilePage)
-
+    
                 const searchPoints = await this.browser.func.getSearchPoints()
                 const missingSearchPoints = this.browser.func.missingSearchPoints(searchPoints, true)
-
+    
                 this.cookies.mobile = await initialContext.cookies()
-
+    
                 const { mobilePoints, desktopPoints } = await this.searchManager.doSearches(
                     data,
                     missingSearchPoints,
@@ -490,20 +493,20 @@ export class MicrosoftRewardsBot {
                     account,
                     accountEmail
                 )
-
+    
                 mobileContextClosed = true
-
+    
                 this.userData.gainedPoints = mobilePoints + desktopPoints
-
+    
                 const finalPoints = await this.browser.func.getCurrentPoints()
                 const collectedPoints = finalPoints - initialPoints
-
+    
                 this.logger.info(
                     'main',
                     'FLOW',
                     `Collected: +${collectedPoints} | Mobile: +${mobilePoints} | Desktop: +${desktopPoints} | ${accountEmail}`
                 )
-
+    
                 return {
                     initialPoints,
                     collectedPoints: collectedPoints || 0
