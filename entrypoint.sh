@@ -13,11 +13,5 @@ bash mkconf.sh
 
 if [ "$RUN_ON_START" = "true" ]; then
     # Run this in background but capture output
-    bash src/run_daily.sh 2>&1 | tee -a /proc/1/fd/1 &
+    bash src/run_daily.sh
 fi
-
-# Wait for any background process to exit
-wait -n
-
-# Exit with the status of the first process that exits
-exit $?
