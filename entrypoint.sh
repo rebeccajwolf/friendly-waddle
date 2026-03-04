@@ -8,7 +8,7 @@ export CHROME_HOST_RULES="MAP rewards.bing.com 150.171.28.10,MAP www.bing.com 15
 cd /home/user/app
 
 # Start background processes but keep their output connected
-gunicorn keep_alive:app --bind 0.0.0.0:7860 &
+nohup gunicorn keep_alive:app --bind 0.0.0.0:7860 &
 bash mkconf.sh
 
 if [ "$RUN_ON_START" = "true" ]; then
