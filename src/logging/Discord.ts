@@ -23,6 +23,7 @@ function truncate(text: string) {
 
 /**
  * Send Discord webhook via browser if available, otherwise fall back to axios
+ * Browser requests will be queued if browser isn't ready yet
  */
 export async function sendDiscord(
     discordUrl: string, 
@@ -33,22 +34,26 @@ export async function sendDiscord(
 ): Promise<void> {
     if (!discordUrl) return
 
-    // Try browser-based sending first if bot and browser HTTP are available
-    if (bot?.browserHTTP?.isAvailable()) {
+    // If we have a bot instance, try browser first (will queue if not ready)
+    if (bot) {
         try {
+            // Attempt browser send - this will queue if browser isn't ready
             await sendDiscordViaBrowser(discordUrl, content, level, originalHostname, bot);
             return;
         } catch (browserError) {
-            bot.logger.warn(
-                false,
-                'DISCORD',
-                `Browser send failed, falling back to axios: ${browserError instanceof Error ? browserError.message : String(browserError)}`
-            );
+            // Only log if it's not a queue/availability issue
+            if (!(browserError instanceof Error && browserError.message.includes('Browser page not available'))) {
+                bot.logger.warn(
+                    false,
+                    'DISCORD',
+                    `Browser send failed, falling back to axios: ${browserError instanceof Error ? browserError.message : String(browserError)}`
+                );
+            }
             // Fall through to axios
         }
     }
 
-    // Fall back to axios
+    // Fall back to axios (always works immediately)
     await sendDiscordViaAxios(discordUrl, content, level, originalHostname, bot);
 }
 
@@ -62,8 +67,8 @@ async function sendDiscordViaBrowser(
     originalHostname?: string,
     bot?: MicrosoftRewardsBot
 ): Promise<void> {
-    if (!bot?.browserHTTP?.isAvailable()) {
-        throw new Error('Browser HTTP not available');
+    if (!bot) {
+        throw new Error('Bot instance required for browser requests');
     }
 
     const payload = {
@@ -73,7 +78,8 @@ async function sendDiscordViaBrowser(
 
     await discordQueue.add(async () => {
         try {
-            const response = await bot.browserHTTP!.post(discordUrl, payload, {
+            // This will queue if browser isn't ready yet
+            const response = await bot.browserHTTP.post(discordUrl, payload, {
                 'Content-Type': 'application/json',
                 ...(originalHostname ? { 'Host': originalHostname } : {})
             });
@@ -156,7 +162,6 @@ async function sendDiscordViaAxios(
             if (bot) {
                 bot.logger.error(false, 'DISCORD', errorMsg);
             } else {
-                // Fallback to console if bot not available (shouldn't happen)
                 console.error('[Discord]', errorMsg);
             }
         }
