@@ -1,6 +1,4 @@
-import axios, { AxiosRequestConfig } from 'axios'
 import PQueue from 'p-queue'
-import https from 'https'
 import type { LogLevel } from './Logger'
 import type { MicrosoftRewardsBot } from '../index'
 import cluster from 'cluster'
@@ -23,8 +21,8 @@ function truncate(text: string) {
 }
 
 /**
- * Send Discord webhook - will use browser in workers, axios in master
- * Enhanced logging for debugging
+ * Send Discord webhook - ALWAYS uses browser HTTP with queuing
+ * Master process will queue requests for workers to handle
  */
 export async function sendDiscord(
     discordUrl: string, 
@@ -40,81 +38,39 @@ export async function sendDiscord(
 
     // Log initial attempt
     if (bot) {
-        bot.logger.debug(
+        bot.logger.info(
             false,
             'DISCORD',
-            `sendDiscord called in ${processType} (PID: ${pid}) - URL: ${discordUrl.substring(0, 50)}...`
+            `📤 Discord webhook triggered in ${processType} (PID: ${pid}) - URL: ${discordUrl.substring(0, 50)}...`
         );
-    } else {
-        console.log(`[DISCORD] sendDiscord called in ${processType} (PID: ${pid}) - No bot instance`);
     }
 
-    // Try browser first (only works in workers with ready browser)
-    if (bot) {
-        try {
-            // Check if we're in a worker and browser might be available
-            if (cluster.isWorker) {
-                bot.logger.debug(
-                    false,
-                    'DISCORD',
-                    `Attempting browser send in worker ${pid}`
-                );
-                
-                await sendDiscordViaBrowser(discordUrl, content, level, originalHostname, bot);
-                bot.logger.info(
-                    false,
-                    'DISCORD',
-                    `✅ Discord webhook sent via browser in worker ${pid}`,
-                    'green'
-                );
-                return;
-            } else {
-                bot.logger.debug(
-                    false,
-                    'DISCORD',
-                    `Master process cannot use browser, falling back to axios`
-                );
-            }
-        } catch (browserError) {
-            // Log browser failure but continue to axios
-            bot.logger.warn(
-                false,
-                'DISCORD',
-                `Browser send failed in ${processType} ${pid}: ${browserError instanceof Error ? browserError.message : String(browserError)}`
-            );
-            // Fall through to axios
-        }
-    }
-
-    // Fall back to axios (works in all processes)
+    // ALWAYS use browser HTTP - it will queue if not ready
     try {
-        await sendDiscordViaAxios(discordUrl, content, level, originalHostname, bot);
+        await sendDiscordViaBrowser(discordUrl, content, level, originalHostname, bot);
+        
         if (bot) {
             bot.logger.info(
                 false,
                 'DISCORD',
-                `✅ Discord webhook sent via axios in ${processType} ${pid}`,
+                `✅ Discord webhook sent successfully via browser in ${processType} ${pid}`,
                 'green'
             );
-        } else {
-            console.log(`[DISCORD] ✅ Webhook sent via axios in ${processType} ${pid}`);
         }
-    } catch (axiosError) {
+    } catch (error) {
         if (bot) {
             bot.logger.error(
                 false,
                 'DISCORD',
-                `❌ Both browser and axios failed in ${processType} ${pid}: ${axiosError instanceof Error ? axiosError.message : String(axiosError)}`
+                `❌ Discord webhook failed in ${processType} ${pid}: ${error instanceof Error ? error.message : String(error)}`
             );
-        } else {
-            console.error(`[DISCORD] ❌ Both browser and axios failed in ${processType} ${pid}:`, axiosError);
         }
-        throw axiosError;
+        throw error;
     }
 }
 
 /**
- * Send Discord webhook via browser (workers only)
+ * Send Discord webhook via browser - will queue if browser not ready
  */
 async function sendDiscordViaBrowser(
     discordUrl: string,
@@ -128,16 +84,20 @@ async function sendDiscordViaBrowser(
     }
 
     const pid = process.pid;
+    const processType = cluster.isWorker ? 'worker' : 'master';
 
+    // Log queue stats before attempt
+    const queueStats = bot.browserHTTP.getQueueStats();
     bot.logger.debug(
         false,
         'DISCORD',
-        `sendDiscordViaBrowser in worker ${pid} - Browser available: ${bot.browserHTTP.isAvailable()}`
+        `📊 BrowserHTTP queue stats before request: Processed=${queueStats.totalProcessed}, Failed=${queueStats.totalFailed}, Queue=${queueStats.currentQueueSize}`
     );
 
     const payload = {
         content: truncate(content),
         allowed_mentions: { parse: [] },
+        username: 'Rewards Bot',
     };
 
     await discordQueue.add(async () => {
@@ -145,113 +105,41 @@ async function sendDiscordViaBrowser(
             bot.logger.debug(
                 false,
                 'DISCORD',
-                `Executing browser webhook in worker ${pid}`
+                `🔄 Sending Discord webhook via browser in ${processType} ${pid} (will queue if browser not ready)`
             );
 
             const startTime = Date.now();
+            
+            // This will queue automatically if browser isn't ready
             const response = await bot.browserHTTP.post(discordUrl, payload, {
                 'Content-Type': 'application/json',
                 ...(originalHostname ? { 'Host': originalHostname } : {})
-            });
+            }, 'high'); // High priority for webhooks
+            
             const duration = Date.now() - startTime;
 
             if (response.status !== 204) {
                 bot.logger.warn(
                     false,
                     'DISCORD',
-                    `Browser webhook in worker ${pid} returned status: ${response.status} (${duration}ms)`
+                    `⚠️ Discord webhook in ${processType} ${pid} returned unexpected status: ${response.status} (${duration}ms)`
                 );
             } else {
                 bot.logger.debug(
                     false,
                     'DISCORD',
-                    `Browser webhook in worker ${pid} succeeded (${duration}ms)`
+                    `✅ Discord webhook in ${processType} ${pid} succeeded (${duration}ms)`
                 );
             }
         } catch (err: any) {
             bot.logger.error(
                 false,
                 'DISCORD',
-                `Browser webhook failed in worker ${pid}: ${err?.message}`
+                `❌ Discord webhook failed in ${processType} ${pid}: ${err?.message}`
             );
             throw err;
         }
     });
-}
-
-/**
- * Send Discord webhook via axios (fallback for all processes)
- */
-async function sendDiscordViaAxios(
-    discordUrl: string, 
-    content: string, 
-    level: LogLevel, 
-    originalHostname?: string,
-    bot?: MicrosoftRewardsBot
-): Promise<void> {
-    const pid = process.pid;
-    const processType = cluster.isWorker ? 'worker' : 'master';
-
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    if (originalHostname) {
-        headers['Host'] = originalHostname
-    }
-
-    const request: AxiosRequestConfig = {
-        method: 'POST',
-        url: discordUrl,
-        headers,
-        data: { content: truncate(content), allowed_mentions: { parse: [] } },
-        timeout: 10000
-    }
-
-    if (originalHostname) {
-        request.httpsAgent = new https.Agent({
-            rejectUnauthorized: false,
-            servername: originalHostname
-        })
-    }
-
-    await discordQueue.add(async () => {
-        try {
-            if (bot) {
-                bot.logger.debug(
-                    false,
-                    'DISCORD',
-                    `Executing axios webhook in ${processType} ${pid}`
-                );
-            }
-
-            const startTime = Date.now();
-            await axios(request);
-            const duration = Date.now() - startTime;
-
-            if (bot) {
-                bot.logger.debug(
-                    false,
-                    'DISCORD',
-                    `Axios webhook succeeded in ${processType} ${pid} (${duration}ms)`
-                );
-            }
-        } catch (err: any) {
-            const status = err?.response?.status
-            if (status === 429) {
-                if (bot) {
-                    bot.logger.debug(false, 'DISCORD', `Rate limited (429) in ${processType} ${pid}`);
-                }
-                return
-            }
-            
-            const errorMsg = `Axios webhook failed in ${processType} ${pid}: ${err?.message} - Status: ${status}`;
-            
-            if (bot) {
-                bot.logger.error(false, 'DISCORD', errorMsg);
-            } else {
-                console.error(`[DISCORD] ${errorMsg}`);
-            }
-            throw err;
-        }
-    })
 }
 
 export async function flushDiscordQueue(timeoutMs = 5000): Promise<void> {

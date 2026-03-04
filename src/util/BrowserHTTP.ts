@@ -8,6 +8,7 @@ export interface BrowserRequestOptions {
     body?: any;
     timeout?: number;
     retries?: number;
+    priority?: 'high' | 'normal' | 'low';  // For queue prioritization
 }
 
 export interface BrowserResponse<T = any> {
@@ -18,22 +19,38 @@ export interface BrowserResponse<T = any> {
     ok: boolean;
 }
 
+interface QueuedRequest {
+    id: string;
+    execute: () => Promise<any>;
+    resolve: (value: any) => void;
+    reject: (reason?: any) => void;
+    priority: 'high' | 'normal' | 'low';
+    timestamp: number;
+    description: string;
+}
+
 export class BrowserHTTP {
     private bot: MicrosoftRewardsBot;
     private page: Page | null = null;
     private defaultTimeout = 30000;
     private maxRetries = 3;
     private isReady = false;
-    private requestQueue: Array<() => Promise<any>> = [];
+    private requestQueue: QueuedRequest[] = [];
+    private processingQueue = false;
     private readonly isWorker = cluster.isWorker;
     private readonly workerId = process.pid;
+    private queueStats = {
+        totalProcessed: 0,
+        totalFailed: 0,
+        currentQueueSize: 0
+    };
 
     constructor(bot: MicrosoftRewardsBot) {
         this.bot = bot;
-        this.bot.logger.debug(
+        this.bot.logger.info(
             false,
             'BROWSER-HTTP',
-            `Initialized in ${this.isWorker ? 'worker' : 'master'} process (PID: ${this.workerId})`
+            `🚀 BrowserHTTP initialized in ${this.isWorker ? 'worker' : 'master'} process (PID: ${this.workerId})`
         );
     }
 
@@ -43,42 +60,79 @@ export class BrowserHTTP {
     setPage(page: Page): void {
         this.page = page;
         this.isReady = true;
-        this.bot.logger.debug(
+        this.bot.logger.info(
             this.bot.isMobile,
             'BROWSER-HTTP',
-            `Browser page set for HTTP requests in ${this.isWorker ? 'worker' : 'master'} process`
+            `✅ Browser page set for HTTP requests in ${this.isWorker ? 'worker' : 'master'} process`
         );
         
-        // Process any queued requests
+        // Process any queued requests immediately
         this.processQueue();
     }
 
     /**
-     * Process queued requests
+     * Process queued requests in priority order
      */
     private async processQueue(): Promise<void> {
-        const queueSize = this.requestQueue.length;
-        if (queueSize > 0) {
-            this.bot.logger.debug(
+        if (this.processingQueue || !this.isReady) return;
+        
+        this.processingQueue = true;
+        this.queueStats.currentQueueSize = this.requestQueue.length;
+        
+        if (this.requestQueue.length > 0) {
+            this.bot.logger.info(
                 this.bot.isMobile,
                 'BROWSER-HTTP',
-                `Processing ${queueSize} queued requests in ${this.isWorker ? 'worker' : 'master'} process`
+                `📦 Processing ${this.requestQueue.length} queued requests in ${this.isWorker ? 'worker' : 'master'} process`
             );
         }
 
-        while (this.requestQueue.length > 0) {
+        // Sort by priority (high first) and then by timestamp (oldest first)
+        const priorityOrder = { 'high': 0, 'normal': 1, 'low': 2 };
+        this.requestQueue.sort((a, b) => {
+            if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
+                return priorityOrder[a.priority] - priorityOrder[b.priority];
+            }
+            return a.timestamp - b.timestamp;
+        });
+
+        while (this.requestQueue.length > 0 && this.isReady) {
             const request = this.requestQueue.shift();
             if (request) {
                 try {
-                    await request();
+                    this.bot.logger.debug(
+                        this.bot.isMobile,
+                        'BROWSER-HTTP',
+                        `⚙️ Processing queued request ${request.id}: ${request.description}`
+                    );
+                    
+                    const result = await request.execute();
+                    request.resolve(result);
+                    this.queueStats.totalProcessed++;
+                    
+                    this.bot.logger.debug(
+                        this.bot.isMobile,
+                        'BROWSER-HTTP',
+                        `✅ Queued request ${request.id} completed successfully`
+                    );
                 } catch (error) {
+                    this.queueStats.totalFailed++;
                     this.bot.logger.error(
                         this.bot.isMobile,
                         'BROWSER-HTTP',
-                        `Queued request failed in ${this.isWorker ? 'worker' : 'master'}: ${error instanceof Error ? error.message : String(error)}`
+                        `❌ Queued request ${request.id} failed: ${error instanceof Error ? error.message : String(error)}`
                     );
+                    request.reject(error);
                 }
             }
+        }
+
+        this.queueStats.currentQueueSize = this.requestQueue.length;
+        this.processingQueue = false;
+        
+        if (this.requestQueue.length > 0) {
+            // More requests were added while processing
+            this.processQueue();
         }
     }
 
@@ -90,63 +144,95 @@ export class BrowserHTTP {
     }
 
     /**
-     * Check if this process can handle browser requests
+     * Wait for browser to be ready with timeout
      */
-    canHandleBrowserRequests(): boolean {
-        return this.isWorker && this.isAvailable();
+    async waitForReady(timeoutMs: number = 30000): Promise<boolean> {
+        if (this.isAvailable()) return true;
+        
+        const start = Date.now();
+        while (!this.isAvailable()) {
+            if (Date.now() - start > timeoutMs) {
+                return false;
+            }
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        return true;
     }
 
     /**
-     * Make an HTTP request - will use browser in workers, fallback to axios in master
+     * Get queue statistics
+     */
+    getQueueStats() {
+        return {
+            ...this.queueStats,
+            currentQueueSize: this.requestQueue.length
+        };
+    }
+
+    /**
+     * Make an HTTP request - always queues in workers, rejects in master
      */
     async request<T = any>(url: string, options: BrowserRequestOptions = {}): Promise<BrowserResponse<T>> {
-        const { method = 'GET', headers = {}, body, timeout = this.defaultTimeout, retries = this.maxRetries } = options;
+        const { 
+            method = 'GET', 
+            headers = {}, 
+            body, 
+            timeout = this.defaultTimeout, 
+            retries = this.maxRetries,
+            priority = 'normal' 
+        } = options;
 
-        // Log request attempt
-        this.bot.logger.debug(
+        // Master process cannot handle browser requests
+        if (!this.isWorker) {
+            const error = new Error('Master process cannot handle browser requests');
+            this.bot.logger.error(
+                false,
+                'BROWSER-HTTP',
+                `❌ ${error.message} - URL: ${url.substring(0, 50)}...`
+            );
+            throw error;
+        }
+
+        // Generate request ID for tracking
+        const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const description = `${method} ${url.substring(0, 50)}...`;
+
+        // If browser is ready, execute immediately
+        if (this.isAvailable()) {
+            this.bot.logger.debug(
+                false,
+                'BROWSER-HTTP',
+                `⚡ Executing request ${requestId} immediately: ${description}`
+            );
+            return this.executeRequest<T>(url, method, headers, body, timeout, retries, requestId);
+        }
+
+        // Otherwise queue the request
+        this.bot.logger.info(
             false,
             'BROWSER-HTTP',
-            `Request ${method} ${url} - Process: ${this.isWorker ? 'worker' : 'master'}, Browser Available: ${this.isAvailable()}`
+            `📥 Queuing request ${requestId} (priority: ${priority}): ${description} - Browser not ready yet`
         );
 
-        // If we're in a worker and browser is ready, use it
-        if (this.isWorker && this.isAvailable()) {
-            return this.executeRequest<T>(url, method, headers, body, timeout, retries);
-        }
-        
-        // If we're in a worker but browser not ready, queue the request
-        if (this.isWorker && !this.isAvailable()) {
-            this.bot.logger.debug(
-                false,
-                'BROWSER-HTTP',
-                `Queuing request in worker ${this.workerId} - browser not ready yet`
-            );
-            
-            return new Promise((resolve, reject) => {
-                this.requestQueue.push(async () => {
-                    try {
-                        const result = await this.executeRequest<T>(url, method, headers, body, timeout, retries);
-                        resolve(result);
-                    } catch (error) {
-                        reject(error);
-                    }
-                });
-            });
-        }
+        return new Promise((resolve, reject) => {
+            const queuedRequest: QueuedRequest = {
+                id: requestId,
+                execute: () => this.executeRequest<T>(url, method, headers, body, timeout, retries, requestId),
+                resolve,
+                reject,
+                priority,
+                timestamp: Date.now(),
+                description
+            };
 
-        // If we're in master process, we need to send to a worker
-        if (!this.isWorker) {
-            this.bot.logger.debug(
-                false,
-                'BROWSER-HTTP',
-                `Master process cannot handle browser request, falling back to axios`
-            );
-            
-            // Return a rejected promise to trigger axios fallback
-            throw new Error('Master process cannot handle browser requests');
-        }
+            this.requestQueue.push(queuedRequest);
+            this.queueStats.currentQueueSize = this.requestQueue.length;
 
-        throw new Error('Browser page not available for HTTP requests');
+            // If browser becomes ready while we're adding to queue, start processing
+            if (this.isReady && !this.processingQueue) {
+                this.processQueue();
+            }
+        });
     }
 
     /**
@@ -158,18 +244,20 @@ export class BrowserHTTP {
         headers: Record<string, string>, 
         body: any, 
         timeout: number,
-        retries: number
+        retries: number,
+        requestId: string
     ): Promise<BrowserResponse<T>> {
         let lastError: Error | null = null;
         
         this.bot.logger.debug(
             this.bot.isMobile,
             'BROWSER-HTTP',
-            `Executing ${method} ${url} in worker ${this.workerId}`
+            `🚀 Executing ${method} ${url.substring(0, 50)}... in worker ${this.workerId} [${requestId}]`
         );
         
         for (let attempt = 1; attempt <= retries; attempt++) {
             try {
+                const startTime = Date.now();
                 const result = await this.page!.evaluate(
                     async ({ url, method, headers, body, timeout }) => {
                         const controller = new AbortController();
@@ -214,10 +302,12 @@ export class BrowserHTTP {
                     { url, method, headers, body, timeout }
                 );
 
-                this.bot.logger.debug(
+                const duration = Date.now() - startTime;
+                this.bot.logger.info(
                     this.bot.isMobile,
                     'BROWSER-HTTP',
-                    `Request successful: ${method} ${url} -> ${result.status} (attempt ${attempt}) in worker ${this.workerId}`
+                    `✅ Request ${requestId} successful: ${method} ${url.substring(0, 50)}... -> ${result.status} (${duration}ms)`,
+                    'green'
                 );
 
                 return result as BrowserResponse<T>;
@@ -227,7 +317,7 @@ export class BrowserHTTP {
                 this.bot.logger.warn(
                     this.bot.isMobile,
                     'BROWSER-HTTP',
-                    `Request failed in worker ${this.workerId} (attempt ${attempt}/${retries}): ${method} ${url} - ${error.message}`
+                    `⚠️ Request ${requestId} failed (attempt ${attempt}/${retries}): ${error.message}`
                 );
 
                 if (attempt < retries) {
@@ -237,35 +327,41 @@ export class BrowserHTTP {
             }
         }
 
-        throw lastError || new Error(`Request failed after ${retries} attempts: ${method} ${url}`);
+        const errorMsg = `Request ${requestId} failed after ${retries} attempts`;
+        this.bot.logger.error(
+            this.bot.isMobile,
+            'BROWSER-HTTP',
+            `❌ ${errorMsg}: ${lastError?.message}`
+        );
+        throw lastError || new Error(errorMsg);
     }
 
     /**
      * Make a GET request
      */
-    async get<T = any>(url: string, headers?: Record<string, string>): Promise<BrowserResponse<T>> {
-        return this.request<T>(url, { method: 'GET', headers });
+    async get<T = any>(url: string, headers?: Record<string, string>, priority?: 'high' | 'normal' | 'low'): Promise<BrowserResponse<T>> {
+        return this.request<T>(url, { method: 'GET', headers, priority });
     }
 
     /**
      * Make a POST request
      */
-    async post<T = any>(url: string, body?: any, headers?: Record<string, string>): Promise<BrowserResponse<T>> {
-        return this.request<T>(url, { method: 'POST', headers, body });
+    async post<T = any>(url: string, body?: any, headers?: Record<string, string>, priority?: 'high' | 'normal' | 'low'): Promise<BrowserResponse<T>> {
+        return this.request<T>(url, { method: 'POST', headers, body, priority });
     }
 
     /**
      * Make a PUT request
      */
-    async put<T = any>(url: string, body?: any, headers?: Record<string, string>): Promise<BrowserResponse<T>> {
-        return this.request<T>(url, { method: 'PUT', headers, body });
+    async put<T = any>(url: string, body?: any, headers?: Record<string, string>, priority?: 'high' | 'normal' | 'low'): Promise<BrowserResponse<T>> {
+        return this.request<T>(url, { method: 'PUT', headers, body, priority });
     }
 
     /**
      * Make a DELETE request
      */
-    async delete<T = any>(url: string, headers?: Record<string, string>): Promise<BrowserResponse<T>> {
-        return this.request<T>(url, { method: 'DELETE', headers });
+    async delete<T = any>(url: string, headers?: Record<string, string>, priority?: 'high' | 'normal' | 'low'): Promise<BrowserResponse<T>> {
+        return this.request<T>(url, { method: 'DELETE', headers, priority });
     }
 
     /**

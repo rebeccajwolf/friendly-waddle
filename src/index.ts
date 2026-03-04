@@ -402,10 +402,21 @@ export class MicrosoftRewardsBot {
                 // Initialize browserHTTP first
                 this.logger.info('main', 'BROWSER', `BrowserHTTP initialized for ${accountEmail}`)
     
+                // Set the page in BrowserHTTP
+                this.browserHTTP.setPage(this.mainMobilePage)
+    
                 // Then set the page in BrowserFunc (which uses browserHTTP)
                 this.browser.func.setPage(this.mainMobilePage)
     
                 this.logger.info('main', 'BROWSER', `Mobile Browser started for ${accountEmail}`)
+    
+                // Log queue stats after browser is ready
+                const queueStats = this.browserHTTP.getQueueStats();
+                this.logger.info(
+                    this.bot.isMobile,
+                    'BROWSER',
+                    `📊 BrowserHTTP queue stats: Processed=${queueStats.totalProcessed}, Failed=${queueStats.totalFailed}, Queue=${queueStats.currentQueueSize}`
+                );
     
                 await this.login.login(this.mainMobilePage, account)
     
