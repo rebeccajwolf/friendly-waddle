@@ -1,5 +1,6 @@
 import type { Page } from 'patchright';
 import type { MicrosoftRewardsBot } from '../index';
+import cluster from 'cluster';
 
 export interface BrowserRequestOptions {
     method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
@@ -24,9 +25,16 @@ export class BrowserHTTP {
     private maxRetries = 3;
     private isReady = false;
     private requestQueue: Array<() => Promise<any>> = [];
+    private readonly isWorker = cluster.isWorker;
+    private readonly workerId = process.pid;
 
     constructor(bot: MicrosoftRewardsBot) {
         this.bot = bot;
+        this.bot.logger.debug(
+            false,
+            'BROWSER-HTTP',
+            `Initialized in ${this.isWorker ? 'worker' : 'master'} process (PID: ${this.workerId})`
+        );
     }
 
     /**
@@ -35,7 +43,11 @@ export class BrowserHTTP {
     setPage(page: Page): void {
         this.page = page;
         this.isReady = true;
-        this.bot.logger.debug(this.bot.isMobile, 'BROWSER-HTTP', 'Browser page set for HTTP requests');
+        this.bot.logger.debug(
+            this.bot.isMobile,
+            'BROWSER-HTTP',
+            `Browser page set for HTTP requests in ${this.isWorker ? 'worker' : 'master'} process`
+        );
         
         // Process any queued requests
         this.processQueue();
@@ -45,6 +57,15 @@ export class BrowserHTTP {
      * Process queued requests
      */
     private async processQueue(): Promise<void> {
+        const queueSize = this.requestQueue.length;
+        if (queueSize > 0) {
+            this.bot.logger.debug(
+                this.bot.isMobile,
+                'BROWSER-HTTP',
+                `Processing ${queueSize} queued requests in ${this.isWorker ? 'worker' : 'master'} process`
+            );
+        }
+
         while (this.requestQueue.length > 0) {
             const request = this.requestQueue.shift();
             if (request) {
@@ -54,7 +75,7 @@ export class BrowserHTTP {
                     this.bot.logger.error(
                         this.bot.isMobile,
                         'BROWSER-HTTP',
-                        `Queued request failed: ${error instanceof Error ? error.message : String(error)}`
+                        `Queued request failed in ${this.isWorker ? 'worker' : 'master'}: ${error instanceof Error ? error.message : String(error)}`
                     );
                 }
             }
@@ -62,36 +83,45 @@ export class BrowserHTTP {
     }
 
     /**
-     * Check if the browser page is available
+     * Check if the browser page is available in this process
      */
     isAvailable(): boolean {
         return this.isReady && this.page !== null && !this.page.isClosed();
     }
 
     /**
-     * Wait for browser to be ready
+     * Check if this process can handle browser requests
      */
-    async waitForReady(timeoutMs: number = 30000): Promise<boolean> {
-        if (this.isAvailable()) return true;
-        
-        const start = Date.now();
-        while (!this.isAvailable()) {
-            if (Date.now() - start > timeoutMs) {
-                return false;
-            }
-            await new Promise(resolve => setTimeout(resolve, 100));
-        }
-        return true;
+    canHandleBrowserRequests(): boolean {
+        return this.isWorker && this.isAvailable();
     }
 
     /**
-     * Make an HTTP request through the browser page
+     * Make an HTTP request - will use browser in workers, fallback to axios in master
      */
     async request<T = any>(url: string, options: BrowserRequestOptions = {}): Promise<BrowserResponse<T>> {
         const { method = 'GET', headers = {}, body, timeout = this.defaultTimeout, retries = this.maxRetries } = options;
 
-        // If browser is not ready, queue the request
-        if (!this.isAvailable()) {
+        // Log request attempt
+        this.bot.logger.debug(
+            false,
+            'BROWSER-HTTP',
+            `Request ${method} ${url} - Process: ${this.isWorker ? 'worker' : 'master'}, Browser Available: ${this.isAvailable()}`
+        );
+
+        // If we're in a worker and browser is ready, use it
+        if (this.isWorker && this.isAvailable()) {
+            return this.executeRequest<T>(url, method, headers, body, timeout, retries);
+        }
+        
+        // If we're in a worker but browser not ready, queue the request
+        if (this.isWorker && !this.isAvailable()) {
+            this.bot.logger.debug(
+                false,
+                'BROWSER-HTTP',
+                `Queuing request in worker ${this.workerId} - browser not ready yet`
+            );
+            
             return new Promise((resolve, reject) => {
                 this.requestQueue.push(async () => {
                     try {
@@ -104,11 +134,23 @@ export class BrowserHTTP {
             });
         }
 
-        return this.executeRequest<T>(url, method, headers, body, timeout, retries);
+        // If we're in master process, we need to send to a worker
+        if (!this.isWorker) {
+            this.bot.logger.debug(
+                false,
+                'BROWSER-HTTP',
+                `Master process cannot handle browser request, falling back to axios`
+            );
+            
+            // Return a rejected promise to trigger axios fallback
+            throw new Error('Master process cannot handle browser requests');
+        }
+
+        throw new Error('Browser page not available for HTTP requests');
     }
 
     /**
-     * Execute the actual request
+     * Execute the actual request in browser
      */
     private async executeRequest<T>(
         url: string, 
@@ -119,6 +161,12 @@ export class BrowserHTTP {
         retries: number
     ): Promise<BrowserResponse<T>> {
         let lastError: Error | null = null;
+        
+        this.bot.logger.debug(
+            this.bot.isMobile,
+            'BROWSER-HTTP',
+            `Executing ${method} ${url} in worker ${this.workerId}`
+        );
         
         for (let attempt = 1; attempt <= retries; attempt++) {
             try {
@@ -169,7 +217,7 @@ export class BrowserHTTP {
                 this.bot.logger.debug(
                     this.bot.isMobile,
                     'BROWSER-HTTP',
-                    `Request successful: ${method} ${url} -> ${result.status} (attempt ${attempt})`
+                    `Request successful: ${method} ${url} -> ${result.status} (attempt ${attempt}) in worker ${this.workerId}`
                 );
 
                 return result as BrowserResponse<T>;
@@ -179,7 +227,7 @@ export class BrowserHTTP {
                 this.bot.logger.warn(
                     this.bot.isMobile,
                     'BROWSER-HTTP',
-                    `Request failed (attempt ${attempt}/${retries}): ${method} ${url} - ${error.message}`
+                    `Request failed in worker ${this.workerId} (attempt ${attempt}/${retries}): ${method} ${url} - ${error.message}`
                 );
 
                 if (attempt < retries) {
