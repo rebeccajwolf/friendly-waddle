@@ -8,8 +8,5 @@ export CHROME_HOST_RULES="MAP rewards.bing.com 150.171.28.10,MAP www.bing.com 15
 
 cd /home/user/app
 
-# execute CMD
-sh -c "nohup gunicorn keep_alive:app --bind 0.0.0.0:7860 & \
-    bash mkconf.sh && \
-    echo $CHROME_HOST_RULES & \
-    yacron -c /home/user/app/job.yaml"
+
+sh -c "echo $CHROME_HOST_RULES"
