@@ -419,10 +419,12 @@ export class MicrosoftRewardsBot {
                 );
     
                 // CRITICAL: Process any queued master requests IMMEDIATELY after browser is ready
+                // After browser is ready, start the queue checker
                 if (cluster.isWorker) {
                     try {
-                        // Dynamically import to avoid circular dependency
                         const discordModule = await import('./logging/Discord');
+                        
+                        // Process any immediate queued requests
                         if (discordModule.processMasterQueue) {
                             this.logger.info(
                                 this.isMobile,
@@ -431,11 +433,21 @@ export class MicrosoftRewardsBot {
                             );
                             discordModule.processMasterQueue(this);
                         }
+                        
+                        // Start periodic queue checker
+                        if (discordModule.startQueueChecker) {
+                            discordModule.startQueueChecker(this);
+                            this.logger.info(
+                                this.isMobile,
+                                'BROWSER',
+                                `⏱️ Started periodic queue checker for master webhooks`
+                            );
+                        }
                     } catch (error) {
                         this.logger.error(
                             this.isMobile,
                             'BROWSER',
-                            `❌ Failed to process master queue: ${error instanceof Error ? error.message : String(error)}`
+                            `❌ Failed to setup queue processing: ${error instanceof Error ? error.message : String(error)}`
                         );
                     }
                 }

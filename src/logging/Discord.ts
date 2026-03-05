@@ -27,8 +27,50 @@ const masterRequestQueue: Array<{
     attempts?: number;
 }> = [];
 
+// Track which workers are processing to avoid duplicates
+const processingWorkers = new Set<number>();
+let queueCheckInterval: NodeJS.Timeout | null = null;
+
 function truncate(text: string) {
     return text.length <= DISCORD_LIMIT ? text : text.slice(0, DISCORD_LIMIT - 14) + ' …(truncated)'
+}
+
+/**
+ * Start periodic queue checking in worker processes
+ */
+export function startQueueChecker(bot: MicrosoftRewardsBot): void {
+    if (!cluster.isWorker) return;
+    if (queueCheckInterval) return;
+    
+    const workerId = process.pid;
+    
+    bot.logger.info(
+        false,
+        'DISCORD',
+        `🔄 Starting queue checker in worker ${workerId}`
+    );
+    
+    // Check queue every 5 seconds
+    queueCheckInterval = setInterval(() => {
+        if (masterRequestQueue.length > 0 && !processingWorkers.has(workerId)) {
+            bot.logger.debug(
+                false,
+                'DISCORD',
+                `🔍 Worker ${workerId} checking queue - ${masterRequestQueue.length} requests waiting`
+            );
+            processMasterQueue(bot);
+        }
+    }, 5000);
+}
+
+/**
+ * Stop queue checker
+ */
+export function stopQueueChecker(): void {
+    if (queueCheckInterval) {
+        clearInterval(queueCheckInterval);
+        queueCheckInterval = null;
+    }
 }
 
 /**
@@ -38,20 +80,29 @@ function truncate(text: string) {
 export function processMasterQueue(bot: MicrosoftRewardsBot): number {
     if (!cluster.isWorker) return 0;
     
+    const workerId = process.pid;
+    
     if (masterRequestQueue.length === 0) {
+        return 0;
+    }
+    
+    // Don't let multiple workers process the same queue simultaneously
+    if (processingWorkers.has(workerId)) {
         bot.logger.debug(
             false,
             'DISCORD',
-            `📭 No queued master requests to process in worker ${process.pid}`
+            `⚠️ Worker ${workerId} already processing queue, skipping`
         );
         return 0;
     }
+    
+    processingWorkers.add(workerId);
     
     const queueSize = masterRequestQueue.length;
     bot.logger.info(
         false,
         'DISCORD',
-        `📦 Worker ${process.pid} processing ${queueSize} queued master requests`
+        `📦 Worker ${workerId} processing ${queueSize} queued master requests`
     );
     
     let processed = 0;
@@ -74,14 +125,14 @@ export function processMasterQueue(bot: MicrosoftRewardsBot): number {
                 bot.logger.debug(
                     false,
                     'DISCORD',
-                    `✅ Queued master webhook sent successfully in worker ${process.pid}`
+                    `✅ Queued master webhook sent successfully in worker ${workerId}`
                 );
                 request.resolve();
             }).catch((error) => {
                 bot.logger.error(
                     false,
                     'DISCORD',
-                    `❌ Queued master webhook failed in worker ${process.pid}: ${error.message}`
+                    `❌ Queued master webhook failed in worker ${workerId}: ${error.message}`
                 );
                 request.reject(error);
             });
@@ -91,9 +142,10 @@ export function processMasterQueue(bot: MicrosoftRewardsBot): number {
     bot.logger.info(
         false,
         'DISCORD',
-        `📊 Worker ${process.pid} initiated ${processed} queued webhook requests`
+        `📊 Worker ${workerId} initiated ${processed} queued webhook requests`
     );
     
+    processingWorkers.delete(workerId);
     return processed;
 }
 
@@ -245,6 +297,11 @@ export async function flushDiscordQueue(timeoutMs = 5000): Promise<void> {
         })(),
         new Promise<void>((_, reject) => setTimeout(() => reject(new Error('discord flush timeout')), timeoutMs))
     ]).catch(() => {})
+    
+    // Also try to process any remaining master queue requests
+    if (cluster.isWorker && masterRequestQueue.length > 0) {
+        console.log(`[DISCORD] Warning: ${masterRequestQueue.length} master requests still queued on flush`);
+    }
 }
 
 // Also export the queue for monitoring
