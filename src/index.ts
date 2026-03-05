@@ -26,7 +26,7 @@ import { sendNtfy, flushNtfyQueue } from './logging/Ntfy'
 import type { DashboardData } from './interface/DashboardData'
 import type { AppDashboardData } from './interface/AppDashBoardData'
 import { HostRulesManager } from './util/HostRules'
-import type { BrowserHTTP } from './util/BrowserHTTP'
+import { BrowserHTTP } from './util/BrowserHTTP'
 
 interface ExecutionContext {
     isMobile: boolean
