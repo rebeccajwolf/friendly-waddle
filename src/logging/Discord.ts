@@ -52,25 +52,46 @@ export function startQueueChecker(bot: MicrosoftRewardsBot): void {
         `🔄 Starting continuous queue checker in worker ${workerId}`
     );
     
-    // Check queue every 2 seconds - ALWAYS check, even if empty
+    // Check queue every 2 seconds - but don't block
     queueCheckInterval = setInterval(() => {
-        const now = Date.now();
-        
-        // Always log queue size for debugging (but throttle logs to avoid spam)
-        if (masterRequestQueue.length > 0 || now - lastQueueCheckTime > 30000) {
+        // Don't block the event loop - use setImmediate
+        setImmediate(() => {
+            const now = Date.now();
+            
+            // Always log queue size for debugging (but throttle logs to avoid spam)
+            if (masterRequestQueue.length > 0 || now - lastQueueCheckTime > 30000) {
+                bot.logger.debug(
+                    false,
+                    'DISCORD',
+                    `🔍 Worker ${workerId} checking queue - ${masterRequestQueue.length} requests waiting`
+                );
+                lastQueueCheckTime = now;
+            }
+            
+            // Process if there are requests
+            if (masterRequestQueue.length > 0) {
+                processMasterQueue(bot);
+            }
+        });
+    }, 2000);
+}
+
+/**
+ * Force queue processing - call this after any major operation
+ */
+export function checkQueueNow(bot: MicrosoftRewardsBot): void {
+    if (!cluster.isWorker) return;
+    
+    setImmediate(() => {
+        if (masterRequestQueue.length > 0) {
             bot.logger.debug(
                 false,
                 'DISCORD',
-                `🔍 Worker ${workerId} checking queue - ${masterRequestQueue.length} requests waiting`
+                `🔍 Immediate queue check - ${masterRequestQueue.length} requests waiting`
             );
-            lastQueueCheckTime = now;
-        }
-        
-        // Process if there are requests
-        if (masterRequestQueue.length > 0) {
             processMasterQueue(bot);
         }
-    }, 2000); // Check every 2 seconds (more frequent than before)
+    });
 }
 
 /**

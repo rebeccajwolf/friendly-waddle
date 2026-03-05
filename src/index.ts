@@ -454,6 +454,12 @@ export class MicrosoftRewardsBot {
     
                 await this.login.login(this.mainMobilePage, account)
     
+                // Check queue after login
+                if (cluster.isWorker) {
+                    const discordModule = await import('./logging/Discord');
+                    discordModule.checkQueueNow(this);
+                }
+    
                 try {
                     this.accessToken = await this.login.getAppAccessToken(this.mainMobilePage, accountEmail)
                 } catch (error) {
@@ -464,11 +470,23 @@ export class MicrosoftRewardsBot {
                     )
                 }
     
+                // Check queue after getting token
+                if (cluster.isWorker) {
+                    const discordModule = await import('./logging/Discord');
+                    discordModule.checkQueueNow(this);
+                }
+    
                 this.cookies.mobile = await initialContext.cookies()
                 this.fingerprint = mobileSession.fingerprint
     
                 const data: DashboardData = await this.browser.func.getDashboardData()
                 const appData: AppDashboardData = await this.browser.func.getAppDashboardData()
+    
+                // Check queue after getting dashboard data
+                if (cluster.isWorker) {
+                    const discordModule = await import('./logging/Discord');
+                    discordModule.checkQueueNow(this);
+                }
     
                 // Set geo
                 this.userData.geoLocale =
@@ -506,6 +524,12 @@ export class MicrosoftRewardsBot {
                 if (this.config.workers.doReadToEarn) await this.activities.doReadToEarn()
                 if (this.config.workers.doPunchCards) await this.workers.doPunchCards(data, this.mainMobilePage)
     
+                // Check queue after activities
+                if (cluster.isWorker) {
+                    const discordModule = await import('./logging/Discord');
+                    discordModule.checkQueueNow(this);
+                }
+    
                 const searchPoints = await this.browser.func.getSearchPoints()
                 const missingSearchPoints = this.browser.func.missingSearchPoints(searchPoints, true)
     
@@ -531,6 +555,12 @@ export class MicrosoftRewardsBot {
                     'FLOW',
                     `Collected: +${collectedPoints} | Mobile: +${mobilePoints} | Desktop: +${desktopPoints} | ${accountEmail}`
                 )
+    
+                // Check queue before closing
+                if (cluster.isWorker) {
+                    const discordModule = await import('./logging/Discord');
+                    discordModule.checkQueueNow(this);
+                }
     
                 // ===== FLUSH DISCORD WEBHOOKS BEFORE CLOSING =====
                 if (cluster.isWorker && this.browserHTTP.isAvailable()) {
