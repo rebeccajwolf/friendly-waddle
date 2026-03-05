@@ -218,8 +218,8 @@ export class BrowserHTTP {
     }
 
     /**
-     * Execute the actual request in browser using page.goto for GET requests
-     * and fetch for other methods
+     * Execute the actual request in browser
+     * CRITICAL: Use domain names, not IPs - host-rules will handle the mapping
      */
     private async executeRequest<T>(
         url: string, 
@@ -242,7 +242,7 @@ export class BrowserHTTP {
             try {
                 const startTime = Date.now();
                 
-                // For GET requests, use page.goto which handles redirects and cookies better
+                // For GET requests, use page.goto
                 if (method === 'GET') {
                     // Set extra HTTP headers if provided
                     if (Object.keys(headers).length > 0) {
@@ -257,7 +257,7 @@ export class BrowserHTTP {
                         }
                     }
 
-                    // Navigate to the URL with better error handling
+                    // Navigate to the URL - using domain name, host-rules will map to IP
                     let response = null;
                     try {
                         response = await this.page!.goto(url, {
@@ -266,18 +266,7 @@ export class BrowserHTTP {
                             referer: 'https://rewards.bing.com/'
                         });
                     } catch (gotoError: any) {
-                        // Check for specific error types
-                        if (gotoError.message.includes('ERR_INVALID_ARGUMENT')) {
-                            throw new Error(`Invalid URL format or protocol: ${url.substring(0, 100)}`);
-                        } else if (gotoError.message.includes('ERR_NAME_NOT_RESOLVED')) {
-                            throw new Error(`DNS resolution failed for: ${url.substring(0, 100)}`);
-                        } else if (gotoError.message.includes('ERR_CONNECTION_REFUSED')) {
-                            throw new Error(`Connection refused: ${url.substring(0, 100)}`);
-                        } else if (gotoError.message.includes('ERR_SSL_PROTOCOL_ERROR')) {
-                            throw new Error(`SSL protocol error: ${url.substring(0, 100)}`);
-                        } else {
-                            throw new Error(`Navigation failed: ${gotoError.message}`);
-                        }
+                        throw new Error(`Navigation failed: ${gotoError.message}`);
                     }
 
                     if (!response) {
@@ -428,7 +417,7 @@ export class BrowserHTTP {
     }
 
     /**
-     * Make a GET request - now using page.goto which handles IP addresses better
+     * Make a GET request - uses domain names, host-rules handle IP mapping
      */
     async get<T = any>(url: string, headers?: Record<string, string>, priority?: 'high' | 'normal' | 'low'): Promise<BrowserResponse<T>> {
         return this.request<T>(url, { method: 'GET', headers, priority });
