@@ -246,15 +246,39 @@ export class BrowserHTTP {
                 if (method === 'GET') {
                     // Set extra HTTP headers if provided
                     if (Object.keys(headers).length > 0) {
-                        await this.page!.setExtraHTTPHeaders(headers);
+                        try {
+                            await this.page!.setExtraHTTPHeaders(headers);
+                        } catch (headerError) {
+                            this.bot.logger.warn(
+                                this.bot.isMobile,
+                                'BROWSER-HTTP',
+                                `⚠️ Failed to set extra headers: ${headerError}`
+                            );
+                        }
                     }
 
-                    // Navigate to the URL
-                    const response = await this.page!.goto(url, {
-                        timeout: timeout,
-                        waitUntil: 'networkidle',
-                        referer: 'https://rewards.bing.com/'
-                    });
+                    // Navigate to the URL with better error handling
+                    let response = null;
+                    try {
+                        response = await this.page!.goto(url, {
+                            timeout: timeout,
+                            waitUntil: 'networkidle',
+                            referer: 'https://rewards.bing.com/'
+                        });
+                    } catch (gotoError: any) {
+                        // Check for specific error types
+                        if (gotoError.message.includes('ERR_INVALID_ARGUMENT')) {
+                            throw new Error(`Invalid URL format or protocol: ${url.substring(0, 100)}`);
+                        } else if (gotoError.message.includes('ERR_NAME_NOT_RESOLVED')) {
+                            throw new Error(`DNS resolution failed for: ${url.substring(0, 100)}`);
+                        } else if (gotoError.message.includes('ERR_CONNECTION_REFUSED')) {
+                            throw new Error(`Connection refused: ${url.substring(0, 100)}`);
+                        } else if (gotoError.message.includes('ERR_SSL_PROTOCOL_ERROR')) {
+                            throw new Error(`SSL protocol error: ${url.substring(0, 100)}`);
+                        } else {
+                            throw new Error(`Navigation failed: ${gotoError.message}`);
+                        }
+                    }
 
                     if (!response) {
                         throw new Error('No response received from page');
@@ -265,7 +289,11 @@ export class BrowserHTTP {
                     const finalUrl = this.page!.url();
 
                     // Clear extra headers to avoid affecting subsequent requests
-                    await this.page!.setExtraHTTPHeaders({});
+                    try {
+                        await this.page!.setExtraHTTPHeaders({});
+                    } catch (clearError) {
+                        // Ignore errors when clearing headers
+                    }
 
                     // Extract data based on content type
                     let data: any;
@@ -380,6 +408,11 @@ export class BrowserHTTP {
 
                 if (attempt < retries) {
                     const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+                    this.bot.logger.debug(
+                        this.bot.isMobile,
+                        'BROWSER-HTTP',
+                        `⏱️ Retrying request ${requestId} in ${delay}ms...`
+                    );
                     await new Promise(resolve => setTimeout(resolve, delay));
                 }
             }

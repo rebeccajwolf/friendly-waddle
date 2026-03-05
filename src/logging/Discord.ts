@@ -30,6 +30,7 @@ const masterRequestQueue: Array<{
 // Track which workers are processing to avoid duplicates
 const processingWorkers = new Set<number>();
 let queueCheckInterval: NodeJS.Timeout | null = null;
+let lastQueueCheckTime = 0;
 
 function truncate(text: string) {
     return text.length <= DISCORD_LIMIT ? text : text.slice(0, DISCORD_LIMIT - 14) + ' …(truncated)'
@@ -37,6 +38,7 @@ function truncate(text: string) {
 
 /**
  * Start periodic queue checking in worker processes
+ * This runs continuously throughout the worker's lifetime
  */
 export function startQueueChecker(bot: MicrosoftRewardsBot): void {
     if (!cluster.isWorker) return;
@@ -47,20 +49,28 @@ export function startQueueChecker(bot: MicrosoftRewardsBot): void {
     bot.logger.info(
         false,
         'DISCORD',
-        `🔄 Starting queue checker in worker ${workerId}`
+        `🔄 Starting continuous queue checker in worker ${workerId}`
     );
     
-    // Check queue every 5 seconds
+    // Check queue every 2 seconds - ALWAYS check, even if empty
     queueCheckInterval = setInterval(() => {
-        if (masterRequestQueue.length > 0) {
+        const now = Date.now();
+        
+        // Always log queue size for debugging (but throttle logs to avoid spam)
+        if (masterRequestQueue.length > 0 || now - lastQueueCheckTime > 30000) {
             bot.logger.debug(
                 false,
                 'DISCORD',
                 `🔍 Worker ${workerId} checking queue - ${masterRequestQueue.length} requests waiting`
             );
+            lastQueueCheckTime = now;
+        }
+        
+        // Process if there are requests
+        if (masterRequestQueue.length > 0) {
             processMasterQueue(bot);
         }
-    }, 5000);
+    }, 2000); // Check every 2 seconds (more frequent than before)
 }
 
 /**
@@ -88,6 +98,11 @@ export function processMasterQueue(bot: MicrosoftRewardsBot): number {
     
     // Don't let multiple workers process the same queue simultaneously
     if (processingWorkers.has(workerId)) {
+        bot.logger.debug(
+            false,
+            'DISCORD',
+            `⚠️ Worker ${workerId} already processing queue, skipping`
+        );
         return 0;
     }
     
@@ -101,6 +116,7 @@ export function processMasterQueue(bot: MicrosoftRewardsBot): number {
     );
     
     let processed = 0;
+    let failed = 0;
     
     // Process all queued requests WITHOUT waiting for them to complete
     // This ensures they run in parallel with other operations
@@ -124,6 +140,7 @@ export function processMasterQueue(bot: MicrosoftRewardsBot): number {
                 );
                 request.resolve();
             }).catch((error) => {
+                failed++;
                 bot.logger.error(
                     false,
                     'DISCORD',
@@ -137,7 +154,7 @@ export function processMasterQueue(bot: MicrosoftRewardsBot): number {
     bot.logger.info(
         false,
         'DISCORD',
-        `📊 Worker ${workerId} initiated ${processed} queued webhook requests`
+        `📊 Worker ${workerId} initiated ${processed} queued webhook requests (${failed} failed)`
     );
     
     processingWorkers.delete(workerId);
