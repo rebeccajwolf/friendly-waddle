@@ -418,12 +418,25 @@ export class MicrosoftRewardsBot {
                     `📊 BrowserHTTP queue stats: Processed=${queueStats.totalProcessed}, Failed=${queueStats.totalFailed}, Queue=${queueStats.currentQueueSize}`
                 );
     
-                // IMPORTANT: Process any queued master requests now that browser is ready
+                // CRITICAL: Process any queued master requests IMMEDIATELY after browser is ready
                 if (cluster.isWorker) {
-                    // Dynamically import to avoid circular dependency
-                    const discordModule = await import('./logging/Discord');
-                    if (discordModule.processMasterQueue) {
-                        discordModule.processMasterQueue(this);
+                    try {
+                        // Dynamically import to avoid circular dependency
+                        const discordModule = await import('./logging/Discord');
+                        if (discordModule.processMasterQueue) {
+                            this.logger.info(
+                                this.isMobile,
+                                'BROWSER',
+                                `🔄 Processing queued master Discord webhooks before login...`
+                            );
+                            discordModule.processMasterQueue(this);
+                        }
+                    } catch (error) {
+                        this.logger.error(
+                            this.isMobile,
+                            'BROWSER',
+                            `❌ Failed to process master queue: ${error instanceof Error ? error.message : String(error)}`
+                        );
                     }
                 }
     

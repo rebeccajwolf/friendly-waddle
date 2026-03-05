@@ -24,6 +24,7 @@ const masterRequestQueue: Array<{
     originalHostname?: string;
     resolve: () => void;
     reject: (error: Error) => void;
+    attempts?: number;
 }> = [];
 
 function truncate(text: string) {
@@ -32,21 +33,37 @@ function truncate(text: string) {
 
 /**
  * Process master queue - called by workers when they're ready
+ * Returns the number of requests processed
  */
-export function processMasterQueue(bot: MicrosoftRewardsBot): void {
-    if (!cluster.isWorker) return;
+export function processMasterQueue(bot: MicrosoftRewardsBot): number {
+    if (!cluster.isWorker) return 0;
     
-    if (masterRequestQueue.length === 0) return;
+    if (masterRequestQueue.length === 0) {
+        bot.logger.debug(
+            false,
+            'DISCORD',
+            `📭 No queued master requests to process in worker ${process.pid}`
+        );
+        return 0;
+    }
     
+    const queueSize = masterRequestQueue.length;
     bot.logger.info(
         false,
         'DISCORD',
-        `📦 Worker ${process.pid} processing ${masterRequestQueue.length} queued master requests`
+        `📦 Worker ${process.pid} processing ${queueSize} queued master requests`
     );
     
+    let processed = 0;
+    
+    // Process all queued requests WITHOUT waiting for them to complete
+    // This ensures they run in parallel with other operations
     while (masterRequestQueue.length > 0) {
         const request = masterRequestQueue.shift();
         if (request) {
+            processed++;
+            
+            // Send the webhook asynchronously - don't await
             sendDiscordViaBrowser(
                 request.discordUrl,
                 request.content,
@@ -54,12 +71,30 @@ export function processMasterQueue(bot: MicrosoftRewardsBot): void {
                 request.originalHostname,
                 bot
             ).then(() => {
+                bot.logger.debug(
+                    false,
+                    'DISCORD',
+                    `✅ Queued master webhook sent successfully in worker ${process.pid}`
+                );
                 request.resolve();
             }).catch((error) => {
+                bot.logger.error(
+                    false,
+                    'DISCORD',
+                    `❌ Queued master webhook failed in worker ${process.pid}: ${error.message}`
+                );
                 request.reject(error);
             });
         }
     }
+    
+    bot.logger.info(
+        false,
+        'DISCORD',
+        `📊 Worker ${process.pid} initiated ${processed} queued webhook requests`
+    );
+    
+    return processed;
 }
 
 /**
@@ -85,7 +120,8 @@ export async function sendDiscord(
                 level,
                 originalHostname,
                 resolve,
-                reject
+                reject,
+                attempts: 0
             });
             
             if (bot) {
@@ -209,4 +245,9 @@ export async function flushDiscordQueue(timeoutMs = 5000): Promise<void> {
         })(),
         new Promise<void>((_, reject) => setTimeout(() => reject(new Error('discord flush timeout')), timeoutMs))
     ]).catch(() => {})
+}
+
+// Also export the queue for monitoring
+export function getMasterQueueSize(): number {
+    return masterRequestQueue.length;
 }
