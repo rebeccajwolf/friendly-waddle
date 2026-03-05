@@ -8,7 +8,7 @@ export interface BrowserRequestOptions {
     body?: any;
     timeout?: number;
     retries?: number;
-    priority?: 'high' | 'normal' | 'low';  // For queue prioritization
+    priority?: 'high' | 'normal' | 'low';
 }
 
 export interface BrowserResponse<T = any> {
@@ -131,7 +131,6 @@ export class BrowserHTTP {
         this.processingQueue = false;
         
         if (this.requestQueue.length > 0) {
-            // More requests were added while processing
             this.processQueue();
         }
     }
@@ -141,22 +140,6 @@ export class BrowserHTTP {
      */
     isAvailable(): boolean {
         return this.isReady && this.page !== null && !this.page.isClosed();
-    }
-
-    /**
-     * Wait for browser to be ready with timeout
-     */
-    async waitForReady(timeoutMs: number = 30000): Promise<boolean> {
-        if (this.isAvailable()) return true;
-        
-        const start = Date.now();
-        while (!this.isAvailable()) {
-            if (Date.now() - start > timeoutMs) {
-                return false;
-            }
-            await new Promise(resolve => setTimeout(resolve, 100));
-        }
-        return true;
     }
 
     /**
@@ -228,7 +211,6 @@ export class BrowserHTTP {
             this.requestQueue.push(queuedRequest);
             this.queueStats.currentQueueSize = this.requestQueue.length;
 
-            // If browser becomes ready while we're adding to queue, start processing
             if (this.isReady && !this.processingQueue) {
                 this.processQueue();
             }
@@ -236,7 +218,8 @@ export class BrowserHTTP {
     }
 
     /**
-     * Execute the actual request in browser
+     * Execute the actual request in browser using page.goto for GET requests
+     * and fetch for other methods
      */
     private async executeRequest<T>(
         url: string, 
@@ -258,59 +241,134 @@ export class BrowserHTTP {
         for (let attempt = 1; attempt <= retries; attempt++) {
             try {
                 const startTime = Date.now();
-                const result = await this.page!.evaluate(
-                    async ({ url, method, headers, body, timeout }) => {
-                        const controller = new AbortController();
-                        const timeoutId = setTimeout(() => controller.abort(), timeout);
+                
+                // For GET requests, use page.goto which handles redirects and cookies better
+                if (method === 'GET') {
+                    // Set extra HTTP headers if provided
+                    if (Object.keys(headers).length > 0) {
+                        await this.page!.setExtraHTTPHeaders(headers);
+                    }
 
+                    // Navigate to the URL
+                    const response = await this.page!.goto(url, {
+                        timeout: timeout,
+                        waitUntil: 'networkidle',
+                        referer: 'https://rewards.bing.com/'
+                    });
+
+                    if (!response) {
+                        throw new Error('No response received from page');
+                    }
+
+                    const status = response.status();
+                    const responseHeaders = response.headers();
+                    const finalUrl = this.page!.url();
+
+                    // Clear extra headers to avoid affecting subsequent requests
+                    await this.page!.setExtraHTTPHeaders({});
+
+                    // Extract data based on content type
+                    let data: any;
+                    const contentType = responseHeaders['content-type'] || '';
+
+                    if (contentType.includes('application/json')) {
                         try {
-                            const response = await fetch(url, {
-                                method,
-                                headers: {
-                                    'Accept': 'application/json',
-                                    'Content-Type': 'application/json',
-                                    ...headers
-                                },
-                                body: body ? JSON.stringify(body) : undefined,
-                                credentials: 'include',
-                                signal: controller.signal
+                            data = await this.page!.evaluate(() => {
+                                const pre = document.querySelector('pre');
+                                if (pre) {
+                                    try {
+                                        return JSON.parse(pre.textContent || '{}');
+                                    } catch {}
+                                }
+                                try {
+                                    return JSON.parse(document.body.textContent || '{}');
+                                } catch {
+                                    return { text: document.body.textContent };
+                                }
                             });
-
-                            clearTimeout(timeoutId);
-
-                            const contentType = response.headers.get('content-type') || '';
-                            let data: any;
-
-                            if (contentType.includes('application/json')) {
-                                data = await response.json();
-                            } else {
-                                data = await response.text();
-                            }
-
-                            return {
-                                status: response.status,
-                                statusText: response.statusText,
-                                headers: Object.fromEntries(response.headers.entries()),
-                                data,
-                                ok: response.ok
-                            };
-                        } catch (error: any) {
-                            clearTimeout(timeoutId);
-                            throw new Error(`Fetch failed: ${error.message}`);
+                        } catch (e) {
+                            this.bot.logger.debug(
+                                this.bot.isMobile,
+                                'BROWSER-HTTP',
+                                `Failed to parse JSON from page: ${e}`
+                            );
+                            data = { url: finalUrl, status };
                         }
-                    },
-                    { url, method, headers, body, timeout }
-                );
+                    } else {
+                        data = { url: finalUrl, status };
+                    }
 
-                const duration = Date.now() - startTime;
-                this.bot.logger.info(
-                    this.bot.isMobile,
-                    'BROWSER-HTTP',
-                    `✅ Request ${requestId} successful: ${method} ${url.substring(0, 50)}... -> ${result.status} (${duration}ms)`,
-                    'green'
-                );
+                    const duration = Date.now() - startTime;
+                    this.bot.logger.info(
+                        this.bot.isMobile,
+                        'BROWSER-HTTP',
+                        `✅ Request ${requestId} successful: ${method} ${url.substring(0, 50)}... -> ${status} (${duration}ms)`,
+                        'green'
+                    );
 
-                return result as BrowserResponse<T>;
+                    return {
+                        status,
+                        statusText: response.statusText(),
+                        headers: responseHeaders,
+                        data,
+                        ok: response.ok()
+                    } as BrowserResponse<T>;
+                } else {
+                    // For POST, PUT, DELETE requests, use fetch
+                    const result = await this.page!.evaluate(
+                        async ({ url, method, headers, body, timeout }) => {
+                            const controller = new AbortController();
+                            const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+                            try {
+                                const response = await fetch(url, {
+                                    method,
+                                    headers: {
+                                        'Accept': 'application/json',
+                                        'Content-Type': 'application/json',
+                                        ...headers
+                                    },
+                                    body: body ? JSON.stringify(body) : undefined,
+                                    credentials: 'include',
+                                    signal: controller.signal
+                                });
+
+                                clearTimeout(timeoutId);
+
+                                const contentType = response.headers.get('content-type') || '';
+                                let data: any;
+
+                                if (contentType.includes('application/json')) {
+                                    data = await response.json();
+                                } else {
+                                    data = await response.text();
+                                }
+
+                                return {
+                                    status: response.status,
+                                    statusText: response.statusText,
+                                    headers: Object.fromEntries(response.headers.entries()),
+                                    data,
+                                    ok: response.ok
+                                };
+                            } catch (error: any) {
+                                clearTimeout(timeoutId);
+                                throw new Error(`Fetch failed: ${error.message}`);
+                            }
+                        },
+                        { url, method, headers, body, timeout }
+                    );
+
+                    const duration = Date.now() - startTime;
+                    this.bot.logger.info(
+                        this.bot.isMobile,
+                        'BROWSER-HTTP',
+                        `✅ Request ${requestId} successful: ${method} ${url.substring(0, 50)}... -> ${result.status} (${duration}ms)`,
+                        'green'
+                    );
+
+                    return result as BrowserResponse<T>;
+                }
 
             } catch (error: any) {
                 lastError = error;
@@ -337,7 +395,7 @@ export class BrowserHTTP {
     }
 
     /**
-     * Make a GET request
+     * Make a GET request - now using page.goto which handles IP addresses better
      */
     async get<T = any>(url: string, headers?: Record<string, string>, priority?: 'high' | 'normal' | 'low'): Promise<BrowserResponse<T>> {
         return this.request<T>(url, { method: 'GET', headers, priority });
