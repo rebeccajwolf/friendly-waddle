@@ -52,7 +52,7 @@ export function startQueueChecker(bot: MicrosoftRewardsBot): void {
     
     // Check queue every 5 seconds
     queueCheckInterval = setInterval(() => {
-        if (masterRequestQueue.length > 0 && !processingWorkers.has(workerId)) {
+        if (masterRequestQueue.length > 0) {
             bot.logger.debug(
                 false,
                 'DISCORD',
@@ -88,11 +88,6 @@ export function processMasterQueue(bot: MicrosoftRewardsBot): number {
     
     // Don't let multiple workers process the same queue simultaneously
     if (processingWorkers.has(workerId)) {
-        bot.logger.debug(
-            false,
-            'DISCORD',
-            `⚠️ Worker ${workerId} already processing queue, skipping`
-        );
         return 0;
     }
     
@@ -147,6 +142,57 @@ export function processMasterQueue(bot: MicrosoftRewardsBot): number {
     
     processingWorkers.delete(workerId);
     return processed;
+}
+
+/**
+ * Final flush - called before worker exits to ensure all webhooks are sent
+ */
+export async function flushMasterQueue(bot: MicrosoftRewardsBot, timeoutMs: number = 10000): Promise<void> {
+    if (!cluster.isWorker) return;
+    
+    const workerId = process.pid;
+    const startTime = Date.now();
+    
+    if (masterRequestQueue.length === 0) {
+        bot.logger.debug(
+            false,
+            'DISCORD',
+            `✅ No pending master requests for worker ${workerId}`
+        );
+        return;
+    }
+    
+    bot.logger.info(
+        false,
+        'DISCORD',
+        `🔄 Worker ${workerId} flushing ${masterRequestQueue.length} queued master requests before exit`
+    );
+    
+    // Process the queue
+    processMasterQueue(bot);
+    
+    // Wait for queue to empty or timeout
+    while (masterRequestQueue.length > 0 && Date.now() - startTime < timeoutMs) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        // Process again if new requests came in
+        if (masterRequestQueue.length > 0) {
+            processMasterQueue(bot);
+        }
+    }
+    
+    if (masterRequestQueue.length === 0) {
+        bot.logger.info(
+            false,
+            'DISCORD',
+            `✅ Worker ${workerId} successfully flushed all master requests`
+        );
+    } else {
+        bot.logger.warn(
+            false,
+            'DISCORD',
+            `⚠️ Worker ${workerId} timeout flushing ${masterRequestQueue.length} requests`
+        );
+    }
 }
 
 /**
@@ -297,11 +343,6 @@ export async function flushDiscordQueue(timeoutMs = 5000): Promise<void> {
         })(),
         new Promise<void>((_, reject) => setTimeout(() => reject(new Error('discord flush timeout')), timeoutMs))
     ]).catch(() => {})
-    
-    // Also try to process any remaining master queue requests
-    if (cluster.isWorker && masterRequestQueue.length > 0) {
-        console.log(`[DISCORD] Warning: ${masterRequestQueue.length} master requests still queued on flush`);
-    }
 }
 
 // Also export the queue for monitoring

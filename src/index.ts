@@ -419,9 +419,9 @@ export class MicrosoftRewardsBot {
                 );
     
                 // CRITICAL: Process any queued master requests IMMEDIATELY after browser is ready
-                // After browser is ready, start the queue checker
                 if (cluster.isWorker) {
                     try {
+                        // Dynamically import to avoid circular dependency
                         const discordModule = await import('./logging/Discord');
                         
                         // Process any immediate queued requests
@@ -531,6 +531,27 @@ export class MicrosoftRewardsBot {
                     'FLOW',
                     `Collected: +${collectedPoints} | Mobile: +${mobilePoints} | Desktop: +${desktopPoints} | ${accountEmail}`
                 )
+    
+                // ===== FLUSH DISCORD WEBHOOKS BEFORE CLOSING =====
+                if (cluster.isWorker && this.browserHTTP.isAvailable()) {
+                    try {
+                        const discordModule = await import('./logging/Discord');
+                        if (discordModule.flushMasterQueue) {
+                            this.logger.info(
+                                this.isMobile,
+                                'FLOW',
+                                `🔄 Flushing queued Discord webhooks before closing browser...`
+                            );
+                            await discordModule.flushMasterQueue(this, 10000);
+                        }
+                    } catch (error) {
+                        this.logger.error(
+                            this.isMobile,
+                            'FLOW',
+                            `❌ Failed to flush Discord queue: ${error instanceof Error ? error.message : String(error)}`
+                        );
+                    }
+                }
     
                 return {
                     initialPoints,
