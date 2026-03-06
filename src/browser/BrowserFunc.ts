@@ -89,18 +89,10 @@ export default class BrowserFunc {
 
             const response = await this.browserHTTP.get<any>(url, headers);
             
-            this.bot.logger.debug(
-                this.bot.isMobile, 
-                'BROWSER-FUNC', 
-                `Browser response status: ${response.status}, data type: ${typeof response.data}`
-            );
-
             if (response.data && typeof response.data === 'object') {
                 if (response.data.dashboard) {
                     this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', 'Dashboard data fetched successfully via browser');
                     return response.data.dashboard as DashboardData;
-                } else if (response.data.error) {
-                    throw new Error(`API error: ${response.data.error}`);
                 }
             }
             
@@ -117,11 +109,13 @@ export default class BrowserFunc {
 
     /**
      * Fetch app dashboard data using browser-based HTTP with host rules
+     * Uses EXACTLY the same headers as the axios version
      */
     async getAppDashboardDataViaBrowser(): Promise<AppDashboardData> {
         try {
             const url = 'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAIOS&options=613';
             
+            // Build headers exactly as they are in the axios version
             const headers = this.buildHeadersWithHostRules(
                 {
                     Authorization: `Bearer ${this.bot.accessToken}`,
@@ -136,8 +130,22 @@ export default class BrowserFunc {
                 `Fetching app dashboard via browser with URL: ${url}`
             );
 
+            // Log that we're making the request (without exposing full token)
+            const tokenPreview = this.bot.accessToken ? this.bot.accessToken.substring(0, 10) + '...' : 'none';
+            this.bot.logger.debug(
+                this.bot.isMobile,
+                'BROWSER-FUNC',
+                `Using Authorization: Bearer ${tokenPreview}`
+            );
+
             const response = await this.browserHTTP.get<any>(url, headers);
-            return response.data as AppDashboardData;
+            
+            // Check if we got a valid response
+            if (response.status === 200) {
+                return response.data as AppDashboardData;
+            } else {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
         } catch (error) {
             this.bot.logger.error(
                 this.bot.isMobile,
@@ -170,7 +178,12 @@ export default class BrowserFunc {
             );
 
             const response = await this.browserHTTP.get<any>(url, headers);
-            return response.data as XboxDashboardData;
+            
+            if (response.status === 200) {
+                return response.data as XboxDashboardData;
+            } else {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
         } catch (error) {
             this.bot.logger.error(
                 this.bot.isMobile,
@@ -192,9 +205,7 @@ export default class BrowserFunc {
             const headers = this.buildHeadersWithHostRules(
                 {
                     Authorization: `Bearer ${this.bot.accessToken}`,
-                    'X-Rewards-Country': this.bot.userData.geoLocale,
-                    'X-Rewards-Language': 'en',
-                    'X-Rewards-ismobile': 'true'
+                    'User-Agent': 'Bing/32.5.431027001 (com.microsoft.bing; build:431027001; iOS 17.6.1) Alamofire/5.10.2'
                 },
                 url
             );
@@ -253,7 +264,7 @@ export default class BrowserFunc {
      * Enhanced getDashboardData with browser HTTP as primary, axios as fallback
      */
     async getDashboardData(): Promise<DashboardData> {
-        // Try browser HTTP first (since it works for blocked domains)
+        // Try browser HTTP first
         if (this.browserHTTP.isAvailable()) {
             try {
                 this.bot.logger.debug(this.bot.isMobile, 'GET-DASHBOARD-DATA', 'Attempting browser HTTP first...');
@@ -264,10 +275,7 @@ export default class BrowserFunc {
                     'GET-DASHBOARD-DATA',
                     `Browser HTTP failed, falling back to axios: ${browserError instanceof Error ? browserError.message : String(browserError)}`
                 );
-                // Fall through to axios
             }
-        } else {
-            this.bot.logger.debug(this.bot.isMobile, 'GET-DASHBOARD-DATA', 'Browser HTTP not available, using axios');
         }
 
         // Fall back to axios
@@ -327,7 +335,6 @@ export default class BrowserFunc {
                     'GET-APP-DASHBOARD-DATA',
                     `Browser HTTP failed, falling back to axios: ${browserError instanceof Error ? browserError.message : String(browserError)}`
                 );
-                // Fall through to axios
             }
         }
 
@@ -377,7 +384,6 @@ export default class BrowserFunc {
                     'GET-XBOX-DASHBOARD-DATA',
                     `Browser HTTP failed, falling back to axios: ${browserError instanceof Error ? browserError.message : String(browserError)}`
                 );
-                // Fall through to axios
             }
         }
 
@@ -427,7 +433,6 @@ export default class BrowserFunc {
                     'GET-APP-EARNABLE-POINTS',
                     `Browser HTTP failed, falling back to axios: ${browserError instanceof Error ? browserError.message : String(browserError)}`
                 );
-                // Fall through to axios
             }
         }
 
@@ -440,9 +445,8 @@ export default class BrowserFunc {
             const headers = this.hostRules.buildHeaders(
                 {
                     Authorization: `Bearer ${this.bot.accessToken}`,
-                    'X-Rewards-Country': this.bot.userData.geoLocale,
-                    'X-Rewards-Language': 'en',
-                    'X-Rewards-ismobile': 'true'
+                    'User-Agent':
+                        'Bing/32.5.431027001 (com.microsoft.bing; build:431027001; iOS 17.6.1) Alamofire/5.10.2'
                 },
                 urlResult
             );
