@@ -55,6 +55,8 @@ export default class BrowserFunc {
             const response = await this.browserHTTP.get<any>(
                 'https://rewards.bing.com/api/getuserinfo?type=1'
             );
+            
+            this.bot.logger.info(this.bot.isMobile, 'BROWSER-FUNC', `Dashboard data via browser...${response.data?}`);
 
             if (response.data?.dashboard) {
                 this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', 'Dashboard data fetched successfully via browser');
