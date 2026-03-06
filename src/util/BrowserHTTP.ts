@@ -76,19 +76,46 @@ export class BrowserHTTP {
 
                             clearTimeout(timeoutId);
 
+                            // Get response headers
+                            const headersObj: Record<string, string> = {};
+                            response.headers.forEach((value, key) => {
+                                headersObj[key] = value;
+                            });
+
                             const contentType = response.headers.get('content-type') || '';
                             let data: any;
 
+                            // Try to parse as JSON first
                             if (contentType.includes('application/json')) {
-                                data = await response.json();
+                                try {
+                                    data = await response.json();
+                                } catch (e) {
+                                    // If JSON parsing fails, try text
+                                    const text = await response.text();
+                                    try {
+                                        // Attempt to parse text as JSON (sometimes content-type is wrong)
+                                        data = JSON.parse(text);
+                                    } catch {
+                                        // If all else fails, return as text
+                                        data = text;
+                                    }
+                                }
                             } else {
+                                // For non-JSON responses, get text
                                 data = await response.text();
+                                
+                                // Try to parse text as JSON anyway (some APIs don't set correct content-type)
+                                try {
+                                    data = JSON.parse(data);
+                                } catch {
+                                    // Keep as text if not JSON
+                                }
                             }
 
                             return {
                                 status: response.status,
                                 statusText: response.statusText,
-                                headers: Object.fromEntries(response.headers.entries()),
+                                headers: headersObj,
                                 data,
                                 ok: response.ok
                             };
@@ -104,6 +131,13 @@ export class BrowserHTTP {
                     this.bot.isMobile,
                     'BROWSER-HTTP',
                     `Request successful: ${method} ${url} -> ${result.status} (attempt ${attempt})`
+                );
+
+                // Log the data structure for debugging
+                this.bot.logger.debug(
+                    this.bot.isMobile,
+                    'BROWSER-HTTP',
+                    `Response data type: ${typeof result.data}, has dashboard: ${result.data && 'dashboard' in result.data}`
                 );
 
                 return result as BrowserResponse<T>;

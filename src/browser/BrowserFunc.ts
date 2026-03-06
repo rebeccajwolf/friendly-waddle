@@ -56,11 +56,38 @@ export default class BrowserFunc {
                 'https://rewards.bing.com/api/getuserinfo?type=1'
             );
             
-            this.bot.logger.info(this.bot.isMobile, 'BROWSER-FUNC', `Dashboard data via browser...${response.data?.dashboard}`);
-
-            if (response.data?.dashboard) {
-                this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', 'Dashboard data fetched successfully via browser');
-                return response.data.dashboard as DashboardData;
+            this.bot.logger.debug(
+                this.bot.isMobile, 
+                'BROWSER-FUNC', 
+                `Browser response status: ${response.status}, data type: ${typeof response.data}`
+            );
+            
+            // Log a sample of the response for debugging
+            if (response.data) {
+                const dataStr = JSON.stringify(response.data).substring(0, 200);
+                this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', `Response preview: ${dataStr}...`);
+            }
+    
+            // Check if response.data exists and has dashboard property
+            if (response.data && typeof response.data === 'object') {
+                if (response.data.dashboard) {
+                    this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', 'Dashboard data fetched successfully via browser');
+                    return response.data.dashboard as DashboardData;
+                } else if (response.data.error) {
+                    throw new Error(`API error: ${response.data.error}`);
+                } else {
+                    this.bot.logger.warn(
+                        this.bot.isMobile, 
+                        'BROWSER-FUNC', 
+                        `Response missing dashboard property. Keys: ${Object.keys(response.data).join(', ')}`
+                    );
+                }
+            } else {
+                this.bot.logger.warn(
+                    this.bot.isMobile, 
+                    'BROWSER-FUNC', 
+                    `Response data is not an object: ${typeof response.data}`
+                );
             }
             
             throw new Error('Dashboard data missing from browser response');
