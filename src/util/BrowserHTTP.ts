@@ -130,7 +130,7 @@ export class BrowserHTTP {
      * Make a GET request
      */
     async get<T = any>(url: string, headers?: Record<string, string>): Promise<BrowserResponse<T>> {
-        return this.request<T>(url, { method: 'GET', headers });
+        return this.request<T>(url, { method: 'GET', headers, body });
     }
 
     /**
