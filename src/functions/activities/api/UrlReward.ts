@@ -44,12 +44,13 @@ export class UrlReward extends Workers {
 
                 let response;
                 if (method === 'POST') {
-                    // Handle different body types
-                    let body = config.data;
-                    if (config.data instanceof URLSearchParams) {
-                        body = Object.fromEntries(config.data);
-                    }
-                    response = await this.bot.browserHTTP.post<T>(url, body, headers);
+                    // For POST requests with URLSearchParams, send as is
+                    // BrowserHTTP will handle the conversion
+                    response = await this.bot.browserHTTP.post<T>(
+                        url, 
+                        config.data, // Pass URLSearchParams directly
+                        headers
+                    );
                 } else {
                     response = await this.bot.browserHTTP.get<T>(url, headers);
                 }
@@ -126,6 +127,10 @@ export class UrlReward extends Workers {
                 `Prepared UrlReward headers | offerId=${offerId} | cookieLength=${this.cookieHeader.length} | fingerprintHeaderKeys=${Object.keys(this.fingerprintHeader).length}`
             )
 
+            // Use the original URL with X-Requested-With parameter
+            const url = 'https://rewards.bing.com/api/reportactivity?X-Requested-With=XMLHttpRequest';
+            
+            // Prepare form data exactly as it was working with axios
             const formData = new URLSearchParams({
                 id: offerId,
                 hash: promotion.hash,
@@ -135,31 +140,27 @@ export class UrlReward extends Workers {
                 form: '',
                 type: '',
                 __RequestVerificationToken: this.bot.requestToken
-            })
+            });
 
             this.bot.logger.debug(
                 this.bot.isMobile,
                 'URL-REWARD',
-                `Prepared UrlReward form data | offerId=${offerId} | hash=${promotion.hash} | timeZone=60 | activityAmount=1`
-            )
+                `Prepared UrlReward form data | offerId=${offerId} | hash=${promotion.hash} | data=${formData.toString()}`
+            );
 
-            // IMPORTANT: Use the DOMAIN NAME, not the IP from hostRules
-            // The browser's --host-rules will handle the IP mapping
-            const url = 'https://rewards.bing.com/api/reportactivity?X-Requested-With=XMLHttpRequest';
-            
-            // Apply host rules to get the URL result (for headers)
+            // Apply host rules to get the URL result for headers
             const urlResult = this.applyHostRulesToUrl(url);
             const refererResult = this.applyHostRulesToUrl('https://rewards.bing.com/');
             const originResult = this.applyHostRulesToUrl('https://rewards.bing.com');
             
-            // Build headers with host rules - pass the urlResult, not the string
+            // Build headers exactly as they were for axios
             const headers = this.hostRules.buildHeaders(
                 {
                     ...(this.bot.fingerprint?.headers ?? {}),
                     Cookie: this.cookieHeader,
-                    'X-Requested-With': 'XMLHttpRequest'
+                    // No Content-Type header - let browser set it automatically for form data
                 },
-                urlResult, // This is a HostRuleResult, not a string
+                urlResult,
                 {
                     Referer: refererResult.url,
                     Origin: originResult.url
@@ -167,63 +168,63 @@ export class UrlReward extends Workers {
             );
 
             const request: AxiosRequestConfig = {
-                url: url, // Use domain name for the URL, not IP
+                url: url, // Use the original URL with X-Requested-With
                 method: 'POST',
                 headers,
-                data: formData
+                data: formData // Pass URLSearchParams directly
             }
 
             this.bot.logger.debug(
                 this.bot.isMobile,
                 'URL-REWARD',
                 `Sending UrlReward request via browser primary | offerId=${offerId} | url=${url}`
-            )
+            );
 
             // Make request using browser primary
-            await this.makeRequest<any>(request, true)
+            await this.makeRequest<any>(request, true);
 
             this.bot.logger.debug(
                 this.bot.isMobile,
                 'URL-REWARD',
                 `Received UrlReward response | offerId=${offerId}`
-            )
+            );
 
-            const newBalance = await this.bot.browser.func.getCurrentPoints()
-            this.gainedPoints = newBalance - this.oldBalance
+            const newBalance = await this.bot.browser.func.getCurrentPoints();
+            this.gainedPoints = newBalance - this.oldBalance;
 
             this.bot.logger.debug(
                 this.bot.isMobile,
                 'URL-REWARD',
                 `Balance delta after UrlReward | offerId=${offerId} | oldBalance=${this.oldBalance} | newBalance=${newBalance} | gainedPoints=${this.gainedPoints}`
-            )
+            );
 
             if (this.gainedPoints > 0) {
-                this.bot.userData.currentPoints = newBalance
-                this.bot.userData.gainedPoints = (this.bot.userData.gainedPoints ?? 0) + this.gainedPoints
+                this.bot.userData.currentPoints = newBalance;
+                this.bot.userData.gainedPoints = (this.bot.userData.gainedPoints ?? 0) + this.gainedPoints;
 
                 this.bot.logger.info(
                     this.bot.isMobile,
                     'URL-REWARD',
                     `Completed UrlReward | offerId=${offerId} | gainedPoints=${this.gainedPoints} | newBalance=${newBalance}`,
                     'green'
-                )
+                );
             } else {
                 this.bot.logger.warn(
                     this.bot.isMobile,
                     'URL-REWARD',
                     `Failed UrlReward with no points | offerId=${offerId} | oldBalance=${this.oldBalance} | newBalance=${newBalance}`
-                )
+                );
             }
 
-            this.bot.logger.debug(this.bot.isMobile, 'URL-REWARD', `Waiting after UrlReward | offerId=${offerId}`)
+            this.bot.logger.debug(this.bot.isMobile, 'URL-REWARD', `Waiting after UrlReward | offerId=${offerId}`);
 
-            await this.bot.utils.wait(this.bot.utils.randomDelay(5000, 10000))
+            await this.bot.utils.wait(this.bot.utils.randomDelay(5000, 10000));
         } catch (error) {
             this.bot.logger.error(
                 this.bot.isMobile,
                 'URL-REWARD',
                 `Error in doUrlReward | offerId=${promotion.offerId} | message=${error instanceof Error ? error.message : String(error)}`
-            )
+            );
         }
     }
 }
