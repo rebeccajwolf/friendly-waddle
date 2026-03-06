@@ -14,53 +14,72 @@ export class UrlReward extends Workers {
     }
 
     /**
-     * Make a request using either axios or browser HTTP with fallback
+     * Make a request using browser HTTP as primary, axios as fallback
      */
     private async makeRequest<T>(
         config: AxiosRequestConfig,
-        useProxy: boolean,
-        fallbackToBrowser: boolean = true
+        useProxy: boolean
     ): Promise<T> {
-        // Try axios first
-        try {
-            const response = await this.bot.axios.request(config, useProxy);
-            return response.data as T;
-        } catch (axiosError) {
-            // If axios fails and browser HTTP is available, try that
-            if (fallbackToBrowser && this.bot.browserHTTP?.isAvailable()) {
+        // Try browser HTTP first if available
+        if (this.bot.browserHTTP?.isAvailable()) {
+            try {
+                const method = config.method?.toUpperCase() || 'GET';
+                const url = config.url || '';
+                
+                // Build headers for browser request
+                const headers = { ...config.headers } as Record<string, string>;
+                
                 this.bot.logger.debug(
                     this.bot.isMobile,
                     'URL-REWARD',
-                    `Axios failed, falling back to browser HTTP: ${axiosError instanceof Error ? axiosError.message : String(axiosError)}`
+                    `Attempting browser HTTP ${method} request to ${url.substring(0, 100)}...`
                 );
 
-                try {
-                    const method = config.method?.toUpperCase() || 'GET';
-                    const url = config.url || '';
-                    const headers = config.headers as Record<string, string> || {};
-                    
+                let response;
+                if (method === 'POST') {
+                    // Handle different body types
                     let body = config.data;
                     if (config.data instanceof URLSearchParams) {
                         body = Object.fromEntries(config.data);
                     }
-
-                    let response;
-                    if (method === 'POST') {
-                        response = await this.bot.browserHTTP.post<T>(url, body, headers);
-                    } else {
-                        response = await this.bot.browserHTTP.get<T>(url, headers);
-                    }
-
-                    return response.data as T;
-                } catch (browserError) {
-                    this.bot.logger.error(
-                        this.bot.isMobile,
-                        'URL-REWARD',
-                        `Browser HTTP also failed: ${browserError instanceof Error ? browserError.message : String(browserError)}`
-                    );
-                    throw browserError;
+                    response = await this.bot.browserHTTP.post<T>(url, body, headers);
+                } else {
+                    response = await this.bot.browserHTTP.get<T>(url, headers);
                 }
+
+                this.bot.logger.debug(
+                    this.bot.isMobile,
+                    'URL-REWARD',
+                    `Browser HTTP request successful: ${method} ${url.substring(0, 100)}... -> ${response.status}`
+                );
+
+                return response.data as T;
+            } catch (browserError) {
+                this.bot.logger.warn(
+                    this.bot.isMobile,
+                    'URL-REWARD',
+                    `Browser HTTP failed, falling back to axios: ${browserError instanceof Error ? browserError.message : String(browserError)}`
+                );
+                // Fall through to axios
             }
+        }
+
+        // Fall back to axios
+        try {
+            this.bot.logger.debug(
+                this.bot.isMobile,
+                'URL-REWARD',
+                `Falling back to axios request to ${config.url?.substring(0, 100)}...`
+            );
+            
+            const response = await this.bot.axios.request(config, useProxy);
+            return response.data as T;
+        } catch (axiosError) {
+            this.bot.logger.error(
+                this.bot.isMobile,
+                'URL-REWARD',
+                `Axios request failed: ${axiosError instanceof Error ? axiosError.message : String(axiosError)}`
+            );
             throw axiosError;
         }
     }
@@ -117,33 +136,37 @@ export class UrlReward extends Workers {
                 `Prepared UrlReward form data | offerId=${offerId} | hash=${promotion.hash} | timeZone=60 | activityAmount=1`
             )
 
-            const urlResult = this.hostRules.applyHostRules('https://rewards.bing.com/api/reportactivity?X-Requested-With=XMLHttpRequest')
-            const refererResult = this.hostRules.applyHostRules('https://rewards.bing.com/')
-            const originResult = this.hostRules.applyHostRules('https://rewards.bing.com')
+            // IMPORTANT: Use the DOMAIN NAME, not the IP from hostRules
+            // The browser's --host-rules will handle the IP mapping
+            const url = 'https://rewards.bing.com/api/reportactivity?X-Requested-With=XMLHttpRequest';
+            
+            // Build headers with host rules (for Host header)
+            const headers = this.hostRules.buildHeaders(
+                {
+                    ...(this.bot.fingerprint?.headers ?? {}),
+                    Cookie: this.cookieHeader,
+                    Referer: 'https://rewards.bing.com/',
+                    Origin: 'https://rewards.bing.com',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                url
+            );
 
             const request: AxiosRequestConfig = {
-                url: urlResult.url,
+                url: url, // Use domain name, not IP
                 method: 'POST',
-                headers: this.hostRules.buildHeaders(
-                    {
-                        ...(this.bot.fingerprint?.headers ?? {}),
-                        Cookie: this.cookieHeader,
-                        Referer: refererResult.url,
-                        Origin: originResult.url
-                    },
-                    urlResult
-                ),
+                headers,
                 data: formData
             }
 
             this.bot.logger.debug(
                 this.bot.isMobile,
                 'URL-REWARD',
-                `Sending UrlReward request | offerId=${offerId} | url=${request.url}`
+                `Sending UrlReward request via browser primary | offerId=${offerId} | url=${url}`
             )
 
-            // Make request but we don't need to use the response data
-            await this.makeRequest<any>(request, true, true)
+            // Make request using browser primary
+            await this.makeRequest<any>(request, true)
 
             this.bot.logger.debug(
                 this.bot.isMobile,
