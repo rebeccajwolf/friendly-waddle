@@ -14,6 +14,13 @@ export class UrlReward extends Workers {
     }
 
     /**
+     * Apply host rules to a URL and get the result
+     */
+    private applyHostRulesToUrl(url: string): { url: string; originalHostname?: string } {
+        return this.hostRules.applyHostRules(url);
+    }
+
+    /**
      * Make a request using browser HTTP as primary, axios as fallback
      */
     private async makeRequest<T>(
@@ -140,20 +147,27 @@ export class UrlReward extends Workers {
             // The browser's --host-rules will handle the IP mapping
             const url = 'https://rewards.bing.com/api/reportactivity?X-Requested-With=XMLHttpRequest';
             
-            // Build headers with host rules (for Host header)
+            // Apply host rules to get the URL result (for headers)
+            const urlResult = this.applyHostRulesToUrl(url);
+            const refererResult = this.applyHostRulesToUrl('https://rewards.bing.com/');
+            const originResult = this.applyHostRulesToUrl('https://rewards.bing.com');
+            
+            // Build headers with host rules - pass the urlResult, not the string
             const headers = this.hostRules.buildHeaders(
                 {
                     ...(this.bot.fingerprint?.headers ?? {}),
                     Cookie: this.cookieHeader,
-                    Referer: 'https://rewards.bing.com/',
-                    Origin: 'https://rewards.bing.com',
                     'X-Requested-With': 'XMLHttpRequest'
                 },
-                url
+                urlResult, // This is a HostRuleResult, not a string
+                {
+                    Referer: refererResult.url,
+                    Origin: originResult.url
+                }
             );
 
             const request: AxiosRequestConfig = {
-                url: url, // Use domain name, not IP
+                url: url, // Use domain name for the URL, not IP
                 method: 'POST',
                 headers,
                 data: formData
