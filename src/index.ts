@@ -88,7 +88,7 @@ export class MicrosoftRewardsBot {
     public cookies: { mobile: Cookie[]; desktop: Cookie[] }
     public fingerprint!: BrowserFingerprintWithHeaders
 
-    public browserHTTP: BrowserHTTP
+    public browserHTTP: BrowserHTTP  // Add this
 
     private pointsCanCollect = 0
 
@@ -124,7 +124,7 @@ export class MicrosoftRewardsBot {
         this.config = loadConfig()
         this.activeWorkers = this.config.clusters
         this.exitedWorkers = []
-        this.browserHTTP = new BrowserHTTP(this)
+        this.browserHTTP = new BrowserHTTP(this)  // Initialize BrowserHTTP
     }
 
     get isMobile(): boolean {
@@ -209,7 +209,7 @@ export class MicrosoftRewardsBot {
                     const level = log.level
                     if (webhook.discord?.enabled && webhook.discord.url) {
                         const { url: modifiedUrl, originalHostname } = this.replaceDiscordUrlHostname(webhook.discord.url)
-                        sendDiscord(modifiedUrl, content, level, originalHostname, this)
+                        sendDiscord(modifiedUrl, content, level, originalHostname, this)  // Pass 'this' as bot
                     }
                     if (webhook.ntfy?.enabled && webhook.ntfy.url) {
                         sendNtfy(webhook.ntfy, content, level)
@@ -402,63 +402,12 @@ export class MicrosoftRewardsBot {
                 // Initialize browserHTTP first
                 this.logger.info('main', 'BROWSER', `BrowserHTTP initialized for ${accountEmail}`)
     
-                // Set the page in BrowserHTTP
-                this.browserHTTP.setPage(this.mainMobilePage)
-    
                 // Then set the page in BrowserFunc (which uses browserHTTP)
                 this.browser.func.setPage(this.mainMobilePage)
     
                 this.logger.info('main', 'BROWSER', `Mobile Browser started for ${accountEmail}`)
     
-                // Log queue stats after browser is ready
-                const queueStats = this.browserHTTP.getQueueStats();
-                this.logger.info(
-                    this.isMobile,
-                    'BROWSER',
-                    `📊 BrowserHTTP queue stats: Processed=${queueStats.totalProcessed}, Failed=${queueStats.totalFailed}, Queue=${queueStats.currentQueueSize}`
-                );
-    
-                // CRITICAL: Process any queued master requests IMMEDIATELY after browser is ready
-                if (cluster.isWorker) {
-                    try {
-                        // Dynamically import to avoid circular dependency
-                        const discordModule = await import('./logging/Discord');
-                        
-                        // Process any immediate queued requests
-                        if (discordModule.processMasterQueue) {
-                            this.logger.info(
-                                this.isMobile,
-                                'BROWSER',
-                                `🔄 Processing queued master Discord webhooks before login...`
-                            );
-                            discordModule.processMasterQueue(this);
-                        }
-                        
-                        // Start periodic queue checker
-                        if (discordModule.startQueueChecker) {
-                            discordModule.startQueueChecker(this);
-                            this.logger.info(
-                                this.isMobile,
-                                'BROWSER',
-                                `⏱️ Started periodic queue checker for master webhooks`
-                            );
-                        }
-                    } catch (error) {
-                        this.logger.error(
-                            this.isMobile,
-                            'BROWSER',
-                            `❌ Failed to setup queue processing: ${error instanceof Error ? error.message : String(error)}`
-                        );
-                    }
-                }
-    
                 await this.login.login(this.mainMobilePage, account)
-    
-                // Check queue after login
-                if (cluster.isWorker) {
-                    const discordModule = await import('./logging/Discord');
-                    discordModule.checkQueueNow(this);
-                }
     
                 try {
                     this.accessToken = await this.login.getAppAccessToken(this.mainMobilePage, accountEmail)
@@ -470,24 +419,12 @@ export class MicrosoftRewardsBot {
                     )
                 }
     
-                // Check queue after getting token
-                if (cluster.isWorker) {
-                    const discordModule = await import('./logging/Discord');
-                    discordModule.checkQueueNow(this);
-                }
-    
                 this.cookies.mobile = await initialContext.cookies()
                 this.fingerprint = mobileSession.fingerprint
     
                 const data: DashboardData = await this.browser.func.getDashboardData()
                 const appData: AppDashboardData = await this.browser.func.getAppDashboardData()
-    
-                // Check queue after getting dashboard data
-                if (cluster.isWorker) {
-                    const discordModule = await import('./logging/Discord');
-                    discordModule.checkQueueNow(this);
-                }
-    
+
                 // Set geo
                 this.userData.geoLocale =
                     account.geoLocale === 'auto' ? data.userProfile.attributes.country : account.geoLocale.toLowerCase()
@@ -498,16 +435,16 @@ export class MicrosoftRewardsBot {
                         `The provided geoLocale is longer than 2 (${this.userData.geoLocale} | auto=${account.geoLocale === 'auto'}), this is likely invalid and can cause errors!`
                     )
                 }
-    
+
                 this.userData.initialPoints = data.userStatus.availablePoints
                 this.userData.currentPoints = data.userStatus.availablePoints
                 const initialPoints = this.userData.initialPoints ?? 0
-    
+
                 const browserEarnable = await this.browser.func.getBrowserEarnablePoints()
                 const appEarnable = await this.browser.func.getAppEarnablePoints()
-    
+
                 this.pointsCanCollect = browserEarnable.mobileSearchPoints + (appEarnable?.totalEarnablePoints ?? 0)
-    
+
                 this.logger.info(
                     'main',
                     'POINTS',
@@ -515,7 +452,7 @@ export class MicrosoftRewardsBot {
                         browserEarnable.mobileSearchPoints
                     } | App: ${appEarnable?.totalEarnablePoints ?? 0} | ${accountEmail} | locale: ${this.userData.geoLocale}`
                 )
-    
+
                 if (this.config.workers.doAppPromotions) await this.workers.doAppPromotions(appData)
                 if (this.config.workers.doDailySet) await this.workers.doDailySet(data, this.mainMobilePage)
                 if (this.config.workers.doSpecialPromotions) await this.workers.doSpecialPromotions(data)
@@ -523,18 +460,12 @@ export class MicrosoftRewardsBot {
                 if (this.config.workers.doDailyCheckIn) await this.activities.doDailyCheckIn()
                 if (this.config.workers.doReadToEarn) await this.activities.doReadToEarn()
                 if (this.config.workers.doPunchCards) await this.workers.doPunchCards(data, this.mainMobilePage)
-    
-                // Check queue after activities
-                if (cluster.isWorker) {
-                    const discordModule = await import('./logging/Discord');
-                    discordModule.checkQueueNow(this);
-                }
-    
+
                 const searchPoints = await this.browser.func.getSearchPoints()
                 const missingSearchPoints = this.browser.func.missingSearchPoints(searchPoints, true)
-    
+
                 this.cookies.mobile = await initialContext.cookies()
-    
+
                 const { mobilePoints, desktopPoints } = await this.searchManager.doSearches(
                     data,
                     missingSearchPoints,
@@ -542,47 +473,20 @@ export class MicrosoftRewardsBot {
                     account,
                     accountEmail
                 )
-    
+
                 mobileContextClosed = true
-    
+
                 this.userData.gainedPoints = mobilePoints + desktopPoints
-    
+
                 const finalPoints = await this.browser.func.getCurrentPoints()
                 const collectedPoints = finalPoints - initialPoints
-    
+
                 this.logger.info(
                     'main',
                     'FLOW',
                     `Collected: +${collectedPoints} | Mobile: +${mobilePoints} | Desktop: +${desktopPoints} | ${accountEmail}`
                 )
-    
-                // Check queue before closing
-                if (cluster.isWorker) {
-                    const discordModule = await import('./logging/Discord');
-                    discordModule.checkQueueNow(this);
-                }
-    
-                // ===== FLUSH DISCORD WEBHOOKS BEFORE CLOSING =====
-                if (cluster.isWorker && this.browserHTTP.isAvailable()) {
-                    try {
-                        const discordModule = await import('./logging/Discord');
-                        if (discordModule.flushMasterQueue) {
-                            this.logger.info(
-                                this.isMobile,
-                                'FLOW',
-                                `🔄 Flushing queued Discord webhooks before closing browser...`
-                            );
-                            await discordModule.flushMasterQueue(this, 10000);
-                        }
-                    } catch (error) {
-                        this.logger.error(
-                            this.isMobile,
-                            'FLOW',
-                            `❌ Failed to flush Discord queue: ${error instanceof Error ? error.message : String(error)}`
-                        );
-                    }
-                }
-    
+
                 return {
                     initialPoints,
                     collectedPoints: collectedPoints || 0

@@ -10,8 +10,8 @@ export TZ=${TZ}
 cd /home/user/app
 
 # Define the minimum and maximum wait times in seconds
-MINWAIT=$((5*60))  # 5 minutes
-MAXWAIT=$((6*60)) # 50 minutes
+MINWAIT=$((2*60))  # 5 minutes
+MAXWAIT=$((3*60)) # 50 minutes
 
 # Calculate a random sleep time within the specified range
 SLEEPTIME=$((MINWAIT + RANDOM % (MAXWAIT - MINWAIT)))

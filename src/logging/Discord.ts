@@ -1,7 +1,8 @@
+import axios, { AxiosRequestConfig } from 'axios'
 import PQueue from 'p-queue'
+import https from 'https'
 import type { LogLevel } from './Logger'
 import type { MicrosoftRewardsBot } from '../index'
-import cluster from 'cluster'
 
 const DISCORD_LIMIT = 2000
 
@@ -16,225 +17,12 @@ const discordQueue = new PQueue({
     carryoverConcurrencyCount: true
 })
 
-// Global queue for master process requests
-const masterRequestQueue: Array<{
-    discordUrl: string;
-    content: string;
-    level: LogLevel;
-    originalHostname?: string;
-    resolve: () => void;
-    reject: (error: Error) => void;
-    attempts?: number;
-}> = [];
-
-// Track which workers are processing to avoid duplicates
-const processingWorkers = new Set<number>();
-let queueCheckInterval: NodeJS.Timeout | null = null;
-let lastQueueCheckTime = 0;
-
 function truncate(text: string) {
     return text.length <= DISCORD_LIMIT ? text : text.slice(0, DISCORD_LIMIT - 14) + ' …(truncated)'
 }
 
 /**
- * Start periodic queue checking in worker processes
- * This runs continuously throughout the worker's lifetime
- */
-export function startQueueChecker(bot: MicrosoftRewardsBot): void {
-    if (!cluster.isWorker) return;
-    if (queueCheckInterval) return;
-    
-    const workerId = process.pid;
-    
-    bot.logger.info(
-        false,
-        'DISCORD',
-        `🔄 Starting continuous queue checker in worker ${workerId}`
-    );
-    
-    // Check queue every 2 seconds - but don't block
-    queueCheckInterval = setInterval(() => {
-        // Don't block the event loop - use setImmediate
-        setImmediate(() => {
-            const now = Date.now();
-            
-            // Always log queue size for debugging (but throttle logs to avoid spam)
-            if (masterRequestQueue.length > 0 || now - lastQueueCheckTime > 30000) {
-                bot.logger.debug(
-                    false,
-                    'DISCORD',
-                    `🔍 Worker ${workerId} checking queue - ${masterRequestQueue.length} requests waiting`
-                );
-                lastQueueCheckTime = now;
-            }
-            
-            // Process if there are requests
-            if (masterRequestQueue.length > 0) {
-                processMasterQueue(bot);
-            }
-        });
-    }, 2000);
-}
-
-/**
- * Force queue processing - call this after any major operation
- */
-export function checkQueueNow(bot: MicrosoftRewardsBot): void {
-    if (!cluster.isWorker) return;
-    
-    setImmediate(() => {
-        if (masterRequestQueue.length > 0) {
-            bot.logger.debug(
-                false,
-                'DISCORD',
-                `🔍 Immediate queue check - ${masterRequestQueue.length} requests waiting`
-            );
-            processMasterQueue(bot);
-        }
-    });
-}
-
-/**
- * Stop queue checker
- */
-export function stopQueueChecker(): void {
-    if (queueCheckInterval) {
-        clearInterval(queueCheckInterval);
-        queueCheckInterval = null;
-    }
-}
-
-/**
- * Process master queue - called by workers when they're ready
- * Returns the number of requests processed
- */
-export function processMasterQueue(bot: MicrosoftRewardsBot): number {
-    if (!cluster.isWorker) return 0;
-    
-    const workerId = process.pid;
-    
-    if (masterRequestQueue.length === 0) {
-        return 0;
-    }
-    
-    // Don't let multiple workers process the same queue simultaneously
-    if (processingWorkers.has(workerId)) {
-        bot.logger.debug(
-            false,
-            'DISCORD',
-            `⚠️ Worker ${workerId} already processing queue, skipping`
-        );
-        return 0;
-    }
-    
-    processingWorkers.add(workerId);
-    
-    const queueSize = masterRequestQueue.length;
-    bot.logger.info(
-        false,
-        'DISCORD',
-        `📦 Worker ${workerId} processing ${queueSize} queued master requests`
-    );
-    
-    let processed = 0;
-    let failed = 0;
-    
-    // Process all queued requests WITHOUT waiting for them to complete
-    // This ensures they run in parallel with other operations
-    while (masterRequestQueue.length > 0) {
-        const request = masterRequestQueue.shift();
-        if (request) {
-            processed++;
-            
-            // Send the webhook asynchronously - don't await
-            sendDiscordViaBrowser(
-                request.discordUrl,
-                request.content,
-                request.level,
-                request.originalHostname,
-                bot
-            ).then(() => {
-                bot.logger.debug(
-                    false,
-                    'DISCORD',
-                    `✅ Queued master webhook sent successfully in worker ${workerId}`
-                );
-                request.resolve();
-            }).catch((error) => {
-                failed++;
-                bot.logger.error(
-                    false,
-                    'DISCORD',
-                    `❌ Queued master webhook failed in worker ${workerId}: ${error.message}`
-                );
-                request.reject(error);
-            });
-        }
-    }
-    
-    bot.logger.info(
-        false,
-        'DISCORD',
-        `📊 Worker ${workerId} initiated ${processed} queued webhook requests (${failed} failed)`
-    );
-    
-    processingWorkers.delete(workerId);
-    return processed;
-}
-
-/**
- * Final flush - called before worker exits to ensure all webhooks are sent
- */
-export async function flushMasterQueue(bot: MicrosoftRewardsBot, timeoutMs: number = 10000): Promise<void> {
-    if (!cluster.isWorker) return;
-    
-    const workerId = process.pid;
-    const startTime = Date.now();
-    
-    if (masterRequestQueue.length === 0) {
-        bot.logger.debug(
-            false,
-            'DISCORD',
-            `✅ No pending master requests for worker ${workerId}`
-        );
-        return;
-    }
-    
-    bot.logger.info(
-        false,
-        'DISCORD',
-        `🔄 Worker ${workerId} flushing ${masterRequestQueue.length} queued master requests before exit`
-    );
-    
-    // Process the queue
-    processMasterQueue(bot);
-    
-    // Wait for queue to empty or timeout
-    while (masterRequestQueue.length > 0 && Date.now() - startTime < timeoutMs) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        // Process again if new requests came in
-        if (masterRequestQueue.length > 0) {
-            processMasterQueue(bot);
-        }
-    }
-    
-    if (masterRequestQueue.length === 0) {
-        bot.logger.info(
-            false,
-            'DISCORD',
-            `✅ Worker ${workerId} successfully flushed all master requests`
-        );
-    } else {
-        bot.logger.warn(
-            false,
-            'DISCORD',
-            `⚠️ Worker ${workerId} timeout flushing ${masterRequestQueue.length} requests`
-        );
-    }
-}
-
-/**
- * Send Discord webhook - Master queues, workers execute via browser
+ * Send Discord webhook via browser if available, otherwise fall back to axios
  */
 export async function sendDiscord(
     discordUrl: string, 
@@ -245,65 +33,27 @@ export async function sendDiscord(
 ): Promise<void> {
     if (!discordUrl) return
 
-    const pid = process.pid;
-
-    // If we're in master process, queue the request for workers
-    if (!cluster.isWorker) {
-        return new Promise((resolve, reject) => {
-            masterRequestQueue.push({
-                discordUrl,
-                content,
-                level,
-                originalHostname,
-                resolve,
-                reject,
-                attempts: 0
-            });
-            
-            if (bot) {
-                bot.logger.info(
-                    false,
-                    'DISCORD',
-                    `📥 Discord webhook queued in master (PID: ${pid}) - Queue size: ${masterRequestQueue.length}`
-                );
-            }
-        });
+    // Try browser-based sending first if bot and browser HTTP are available
+    if (bot?.browserHTTP?.isAvailable()) {
+        try {
+            await sendDiscordViaBrowser(discordUrl, content, level, originalHostname, bot);
+            return;
+        } catch (browserError) {
+            bot.logger.warn(
+                false,
+                'DISCORD',
+                `Browser send failed, falling back to axios: ${browserError instanceof Error ? browserError.message : String(browserError)}`
+            );
+            // Fall through to axios
+        }
     }
 
-    // We're in a worker process - execute via browser
-    if (!bot) {
-        throw new Error('Bot instance required for browser requests in worker');
-    }
-
-    // Log initial attempt
-    bot.logger.info(
-        false,
-        'DISCORD',
-        `📤 Discord webhook triggered in worker (PID: ${pid}) - URL: ${discordUrl.substring(0, 50)}...`
-    );
-
-    // Always use browser HTTP - it will queue if not ready
-    try {
-        await sendDiscordViaBrowser(discordUrl, content, level, originalHostname, bot);
-        
-        bot.logger.info(
-            false,
-            'DISCORD',
-            `✅ Discord webhook sent successfully via browser in worker ${pid}`,
-            'green'
-        );
-    } catch (error) {
-        bot.logger.error(
-            false,
-            'DISCORD',
-            `❌ Discord webhook failed in worker ${pid}: ${error instanceof Error ? error.message : String(error)}`
-        );
-        throw error;
-    }
+    // Fall back to axios
+    await sendDiscordViaAxios(discordUrl, content, level, originalHostname, bot);
 }
 
 /**
- * Send Discord webhook via browser - will queue if browser not ready
+ * Send Discord webhook via browser
  */
 async function sendDiscordViaBrowser(
     discordUrl: string,
@@ -312,66 +62,105 @@ async function sendDiscordViaBrowser(
     originalHostname?: string,
     bot?: MicrosoftRewardsBot
 ): Promise<void> {
-    if (!bot) {
-        throw new Error('Bot instance required for browser requests');
+    if (!bot?.browserHTTP?.isAvailable()) {
+        throw new Error('Browser HTTP not available');
     }
-
-    const pid = process.pid;
-
-    // Log queue stats before attempt
-    const queueStats = bot.browserHTTP.getQueueStats();
-    bot.logger.debug(
-        false,
-        'DISCORD',
-        `📊 BrowserHTTP queue stats before request: Processed=${queueStats.totalProcessed}, Failed=${queueStats.totalFailed}, Queue=${queueStats.currentQueueSize}`
-    );
 
     const payload = {
         content: truncate(content),
         allowed_mentions: { parse: [] },
-        username: 'Rewards Bot',
     };
 
     await discordQueue.add(async () => {
         try {
-            bot.logger.debug(
-                false,
-                'DISCORD',
-                `🔄 Sending Discord webhook via browser in worker ${pid} (will queue if browser not ready)`
-            );
-
-            const startTime = Date.now();
-            
-            // This will queue automatically if browser isn't ready
-            const response = await bot.browserHTTP.post(discordUrl, payload, {
+            const response = await bot.browserHTTP!.post(discordUrl, payload, {
                 'Content-Type': 'application/json',
                 ...(originalHostname ? { 'Host': originalHostname } : {})
-            }, 'high'); // High priority for webhooks
-            
-            const duration = Date.now() - startTime;
+            });
 
             if (response.status !== 204) {
                 bot.logger.warn(
                     false,
                     'DISCORD',
-                    `⚠️ Discord webhook in worker ${pid} returned unexpected status: ${response.status} (${duration}ms)`
+                    `Browser webhook returned status: ${response.status}`
                 );
             } else {
                 bot.logger.debug(
                     false,
                     'DISCORD',
-                    `✅ Discord webhook in worker ${pid} succeeded (${duration}ms)`
+                    `Browser webhook sent successfully to ${discordUrl.substring(0, 50)}...`
                 );
             }
         } catch (err: any) {
             bot.logger.error(
                 false,
                 'DISCORD',
-                `❌ Discord webhook failed in worker ${pid}: ${err?.message}`
+                `Browser webhook failed: ${err?.message} - URL: ${discordUrl.substring(0, 50)}...`
             );
             throw err;
         }
     });
+}
+
+/**
+ * Send Discord webhook via axios (original implementation)
+ */
+async function sendDiscordViaAxios(
+    discordUrl: string, 
+    content: string, 
+    level: LogLevel, 
+    originalHostname?: string,
+    bot?: MicrosoftRewardsBot
+): Promise<void> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (originalHostname) {
+        headers['Host'] = originalHostname
+    }
+
+    const request: AxiosRequestConfig = {
+        method: 'POST',
+        url: discordUrl,
+        headers,
+        data: { content: truncate(content), allowed_mentions: { parse: [] } },
+        timeout: 10000
+    }
+
+    if (originalHostname) {
+        request.httpsAgent = new https.Agent({
+            rejectUnauthorized: false,
+            servername: originalHostname
+        })
+    }
+
+    await discordQueue.add(async () => {
+        try {
+            await axios(request);
+            if (bot) {
+                bot.logger.debug(
+                    false,
+                    'DISCORD',
+                    `Axios webhook sent successfully to ${discordUrl.substring(0, 50)}...`
+                );
+            }
+        } catch (err: any) {
+            const status = err?.response?.status
+            if (status === 429) {
+                if (bot) {
+                    bot.logger.debug(false, 'DISCORD', 'Rate limited (429)');
+                }
+                return
+            }
+            
+            const errorMsg = `Failed to send webhook: ${err?.message} - Status: ${status} - URL: ${discordUrl.substring(0, 50)}...`;
+            
+            if (bot) {
+                bot.logger.error(false, 'DISCORD', errorMsg);
+            } else {
+                // Fallback to console if bot not available (shouldn't happen)
+                console.error('[Discord]', errorMsg);
+            }
+        }
+    })
 }
 
 export async function flushDiscordQueue(timeoutMs = 5000): Promise<void> {
@@ -381,9 +170,4 @@ export async function flushDiscordQueue(timeoutMs = 5000): Promise<void> {
         })(),
         new Promise<void>((_, reject) => setTimeout(() => reject(new Error('discord flush timeout')), timeoutMs))
     ]).catch(() => {})
-}
-
-// Also export the queue for monitoring
-export function getMasterQueueSize(): number {
-    return masterRequestQueue.length;
 }

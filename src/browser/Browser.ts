@@ -68,7 +68,6 @@ class Browser {
 
             browser = await rebrowser.chromium.launch({
                 headless: this.bot.config.headless,
-                executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
                 //executablePath: process.env.CHROME_BIN,
                 ...(proxyConfig && { proxy: proxyConfig }),
                 args: [...Browser.BROWSER_ARGS]
