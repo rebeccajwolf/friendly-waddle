@@ -194,14 +194,14 @@ export class MicrosoftRewardsBot {
         for (const chunk of accountChunks) {
             const worker = cluster.fork()
             worker.send?.({ chunk, runStartTime })
-
+        
             worker.on('message', (msg: { __ipcLog?: IpcLog; __stats?: AccountStats[] }) => {
                 if (msg.__stats) {
                     allAccountStats.push(...msg.__stats)
                 }
-
+        
                 const log = msg.__ipcLog
-
+        
                 if (log && typeof log.content === 'string') {
                     const config = this.config
                     const webhook = config.webhook
