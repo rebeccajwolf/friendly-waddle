@@ -2,7 +2,7 @@ import type { Page } from 'patchright';
 import type { MicrosoftRewardsBot } from '../index';
 
 export interface BrowserRequestOptions {
-    method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+    method?: string;  // ← Changed: allow any string (matches Axios flexibility)
     headers?: Record<string, string>;
     body?: any;
     timeout?: number;
@@ -17,13 +17,10 @@ export interface BrowserResponse<T = any> {
 }
 
 export class BrowserHTTP {
-    private bot: MicrosoftRewardsBot;
     private page: Page | null = null;
     private defaultTimeout = 30000;
 
-    constructor(bot: MicrosoftRewardsBot) {
-        this.bot = bot;
-    }
+    constructor() {}  // ← Removed bot param (unused)
 
     setPage(page: Page): void {
         this.page = page;

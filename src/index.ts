@@ -234,21 +234,20 @@ export class MicrosoftRewardsBot {
                 `Worker ${worker.process?.pid ?? '?'} ${label} | Code: ${code ?? 'n/a'} | Active workers: ${this.activeWorkers}`
             )
             if (this.activeWorkers <= 0) {
-                const totalCollectedPoints = allAccountStats.reduce((sum, s) => sum + s.collectedPoints, 0)
+                // Removed: const totalCollectedPoints = ...
                 const totalInitialPoints = allAccountStats.reduce((sum, s) => sum + s.initialPoints, 0)
                 const totalFinalPoints = allAccountStats.reduce((sum, s) => sum + s.finalPoints, 0)
                 const totalDurationMinutes = ((Date.now() - runStartTime) / 1000 / 60).toFixed(1)
-
+            
                 this.logger.info(
                     'main',
                     'RUN-END',
-                    `Completed all accounts | Accounts processed: \( {allAccountStats.length} | Total points collected: + \){totalCollectedPoints} | Old total: ${totalInitialPoints} → New total: ${totalFinalPoints} | Total runtime: ${totalDurationMinutes}min`,
+                    `Completed all accounts | Accounts processed: \( {allAccountStats.length} | Total points collected: + \){allAccountStats.reduce((sum, s) => sum + s.collectedPoints, 0)} | Old total: ${totalInitialPoints} → New total: ${totalFinalPoints} | Total runtime: ${totalDurationMinutes}min`,
                     'green'
                 )
                 await flushAllWebhooks()
                 process.exit(code ?? 0)
             }
-        }
 
         cluster.on('exit', (worker, code) => {
             void onWorkerDone('exit', worker, code)
@@ -367,18 +366,18 @@ export class MicrosoftRewardsBot {
         }
 
         if (this.config.clusters <= 1 && !cluster.isWorker) {
-            const totalCollectedPoints = accountStats.reduce((sum, s) => sum + s.collectedPoints, 0)
+            // Removed: const totalCollectedPoints = ...
             const totalInitialPoints = accountStats.reduce((sum, s) => sum + s.initialPoints, 0)
             const totalFinalPoints = accountStats.reduce((sum, s) => sum + s.finalPoints, 0)
             const totalDurationMinutes = ((Date.now() - runStartTime) / 1000 / 60).toFixed(1)
-
+        
             this.logger.info(
                 'main',
                 'RUN-END',
-                `Completed all accounts | Accounts processed: \( {accountStats.length} | Total points collected: + \){totalCollectedPoints} | Old total: ${totalInitialPoints} → New total: ${totalFinalPoints} | Total runtime: ${totalDurationMinutes}min`,
+                `Completed all accounts | Accounts processed: \( {accountStats.length} | Total points collected: + \){accountStats.reduce((sum, s) => sum + s.collectedPoints, 0)} | Old total: ${totalInitialPoints} → New total: ${totalFinalPoints} | Total runtime: ${totalDurationMinutes}min`,
                 'green'
             )
-
+        
             await flushAllWebhooks()
             process.exit()
         }

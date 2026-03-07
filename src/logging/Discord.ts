@@ -1,4 +1,4 @@
-import axios, { AxiosRequestConfig } from 'axios'
+import type { AxiosRequestConfig } from 'axios'
 import PQueue from 'p-queue'
 import https from 'https'
 import type { LogLevel } from './Logger'

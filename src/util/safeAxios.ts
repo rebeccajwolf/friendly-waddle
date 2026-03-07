@@ -16,10 +16,10 @@ export async function safeRequest<T = any>(
         if (blockedErrors.includes(error.code) && bot.browserHTTP?.isAvailable()) {
             bot.logger.warn(false, 'SAFE-AXIOS', `Axios failed (${error.code}) for ${url} — falling back to browserHTTP`);
             
-            // Convert Axios config to BrowserHTTP options (simple mapping)
+            // Convert Axios config to BrowserHTTP options
             const browserOptions = {
-                method: config.method || 'GET',
-                headers: config.headers,
+                method: config.method as string | undefined,  // ← Type assertion to match broader string type
+                headers: config.headers as Record<string, string> | undefined,
                 body: config.data,
                 timeout: config.timeout || 30000
             };
