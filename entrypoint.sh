@@ -151,9 +151,3 @@ fi
 echo "========================================="
 echo "✅ All services started"
 echo "========================================="
-
-# Wait for any process to exit
-wait -n
-
-# Exit with the status of the first process that exits
-exit $?
