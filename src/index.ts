@@ -194,14 +194,14 @@ export class MicrosoftRewardsBot {
         for (const chunk of accountChunks) {
             const worker = cluster.fork()
             worker.send?.({ chunk, runStartTime })
-        
+
             worker.on('message', (msg: { __ipcLog?: IpcLog; __stats?: AccountStats[] }) => {
                 if (msg.__stats) {
                     allAccountStats.push(...msg.__stats)
                 }
-        
+
                 const log = msg.__ipcLog
-        
+
                 if (log && typeof log.content === 'string') {
                     const config = this.config
                     const webhook = config.webhook
@@ -218,7 +218,7 @@ export class MicrosoftRewardsBot {
             })
         }
 
-        const onWorkerDone = async (label: 'exit' | 'disconnect', worker: Worker, code?: number): Promise<void> {
+        const onWorkerDone = async (label: 'exit' | 'disconnect', worker: Worker, code?: number): Promise<void> => {
             const { pid } = worker.process
             this.activeWorkers -= 1
 
@@ -267,7 +267,7 @@ export class MicrosoftRewardsBot {
                 `Worker ${process.pid} received ${chunk.length} accounts.`
             )
             try {
-                const stats = await this.runTasks(chunk, runStartTime ?? runStartTime ?? Date.now())
+                const stats = await this.runTasks(chunk, runStartTime)
                 if (process.send) {
                     process.send({ __stats: stats })
                 }
