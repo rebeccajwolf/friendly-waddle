@@ -46,7 +46,14 @@ export default class BrowserFunc {
 
     private buildHeadersWithHostRules(baseHeaders: any, url: string, additionalHeaders?: any): any {
         const urlResult = this.applyHostRulesToUrl(url);
-        return this.hostRules.buildHeaders(baseHeaders, urlResult, additionalHeaders);
+        const headers = this.hostRules.buildHeaders(baseHeaders, urlResult, additionalHeaders);
+
+        // Force Host header to original domain even if URL uses IP (critical for server-side validation)
+        if (urlResult.originalHostname) {
+            headers['Host'] = urlResult.originalHostname;
+        }
+
+        return headers;
     }
 
     async getDashboardDataViaBrowser(): Promise<DashboardData> {
@@ -72,7 +79,7 @@ export default class BrowserFunc {
             this.bot.logger.debug(
                 this.bot.isMobile,
                 'BROWSER-FUNC',
-                `Fetching dashboard via browser with URL: ${url}`
+                `Fetching dashboard via browser with URL: ${url} | Headers include Host: ${headers['Host'] || 'none'}`
             );
 
             const response = await this.browserHTTP.get<any>(url, headers);
@@ -101,20 +108,20 @@ export default class BrowserFunc {
         try {
             const urlResult = this.applyHostRulesToUrl('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAIOS&options=613');
             
-            this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', `Using mapped URL for app dashboard: ${urlResult.url}`);
+            this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', `Using mapped URL for app dashboard: ${urlResult.url} | Original host: ${urlResult.originalHostname || 'none'}`);
             
             const headers = this.buildHeadersWithHostRules(
                 {
                     Authorization: `Bearer ${this.bot.accessToken}`,
                     'User-Agent': 'Bing/32.5.431027001 (com.microsoft.bing; build:431027001; iOS 17.6.1) Alamofire/5.10.2'
                 },
-                'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAIOS&options=613'
+                'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAIOS&options=613'  // pass original to force Host header
             );
 
             this.bot.logger.debug(
                 this.bot.isMobile,
                 'BROWSER-FUNC',
-                `Fetching app dashboard via browser with URL: ${urlResult.url}`
+                `Fetching app dashboard via browser with URL: ${urlResult.url} | Host header: ${headers['Host'] || 'missing'}`
             );
 
             const response = await this.browserHTTP.get<any>(urlResult.url, headers);
@@ -140,7 +147,7 @@ export default class BrowserFunc {
         try {
             const urlResult = this.applyHostRulesToUrl('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=xboxapp&options=6');
             
-            this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', `Using mapped URL for Xbox dashboard: ${urlResult.url}`);
+            this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', `Using mapped URL for Xbox dashboard: ${urlResult.url} | Original host: ${urlResult.originalHostname || 'none'}`);
             
             const headers = this.buildHeadersWithHostRules(
                 {
@@ -153,7 +160,7 @@ export default class BrowserFunc {
             this.bot.logger.debug(
                 this.bot.isMobile,
                 'BROWSER-FUNC',
-                `Fetching Xbox dashboard via browser with URL: ${urlResult.url}`
+                `Fetching Xbox dashboard via browser with URL: ${urlResult.url} | Host header: ${headers['Host'] || 'missing'}`
             );
 
             const response = await this.browserHTTP.get<any>(urlResult.url, headers);
@@ -181,7 +188,7 @@ export default class BrowserFunc {
             
             const urlResult = this.applyHostRulesToUrl('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAAndroid&options=613');
             
-            this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', `Using mapped URL for app earnable points: ${urlResult.url}`);
+            this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', `Using mapped URL for app earnable points: ${urlResult.url} | Original host: ${urlResult.originalHostname || 'none'}`);
             
             const headers = this.buildHeadersWithHostRules(
                 {
@@ -194,7 +201,7 @@ export default class BrowserFunc {
             this.bot.logger.debug(
                 this.bot.isMobile,
                 'BROWSER-FUNC',
-                `Fetching app earnable points via browser with URL: ${urlResult.url}`
+                `Fetching app earnable points via browser with URL: ${urlResult.url} | Host header: ${headers['Host'] || 'missing'}`
             );
 
             const response = await this.browserHTTP.get<any>(urlResult.url, headers);
@@ -243,9 +250,9 @@ export default class BrowserFunc {
         }
     }
 
-    // ────────────────────────────────────────────────────────────────────────────────
-    // The remaining methods stay exactly as in your last working version
-    // (getDashboardData, getAppDashboardData, getXBoxDashboardData, getAppEarnablePoints, etc.)
+    // The rest of the file (getDashboardData, getAppDashboardData, getXBoxDashboardData, getAppEarnablePoints,
+    // getSearchPoints, missingSearchPoints, getBrowserEarnablePoints, getCurrentPoints, closeBrowser, buildCookieHeader)
+    // remains exactly as in your previous working version — no changes needed there
     // ────────────────────────────────────────────────────────────────────────────────
 
     async getDashboardData(): Promise<DashboardData> {
