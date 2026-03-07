@@ -71,6 +71,7 @@ export class BrowserHTTP {
                                 },
                                 body: body ? JSON.stringify(body) : undefined,
                                 credentials: 'include',
+                                mode: 'cors', // Explicitly set CORS mode
                                 signal: controller.signal
                             });
 

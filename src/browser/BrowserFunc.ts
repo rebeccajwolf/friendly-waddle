@@ -109,11 +109,12 @@ export default class BrowserFunc {
 
     /**
      * Fetch app dashboard data using browser-based HTTP with host rules
-     * Uses EXACTLY the same headers as the axios version
+     * Uses the IP directly (like axios) to avoid token domain validation issues
      */
     async getAppDashboardDataViaBrowser(): Promise<AppDashboardData> {
         try {
-            const url = 'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAIOS&options=613';
+            // Use the IP directly instead of domain (like axios does)
+            const urlResult = this.applyHostRulesToUrl('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAIOS&options=613');
             
             // Build headers exactly as they are in the axios version
             const headers = this.buildHeadersWithHostRules(
@@ -121,15 +122,15 @@ export default class BrowserFunc {
                     Authorization: `Bearer ${this.bot.accessToken}`,
                     'User-Agent': 'Bing/32.5.431027001 (com.microsoft.bing; build:431027001; iOS 17.6.1) Alamofire/5.10.2'
                 },
-                url
+                'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAIOS&options=613'
             );
-
+    
             this.bot.logger.debug(
                 this.bot.isMobile,
                 'BROWSER-FUNC',
-                `Fetching app dashboard via browser with URL: ${url}`
+                `Fetching app dashboard via browser with URL: ${urlResult.url}`
             );
-
+    
             // Log that we're making the request (without exposing full token)
             const tokenPreview = this.bot.accessToken ? this.bot.accessToken.substring(0, 10) + '...' : 'none';
             this.bot.logger.debug(
@@ -137,12 +138,14 @@ export default class BrowserFunc {
                 'BROWSER-FUNC',
                 `Using Authorization: Bearer ${tokenPreview}`
             );
-
-            const response = await this.browserHTTP.get<any>(url, headers);
+    
+            const response = await this.browserHTTP.get<any>(urlResult.url, headers);
             
             // Check if we got a valid response
             if (response.status === 200) {
                 return response.data as AppDashboardData;
+            } else if (response.status === 401) {
+                throw new Error('Unauthorized - token may be expired or invalid');
             } else {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
@@ -155,7 +158,7 @@ export default class BrowserFunc {
             throw error;
         }
     }
-
+    
     /**
      * Fetch Xbox dashboard data using browser-based HTTP with host rules
      */
