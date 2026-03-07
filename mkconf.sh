@@ -11,7 +11,7 @@ cat > /home/user/app/dist/config.json <<EOF
     "baseURL": "https://rewards.bing.com",
     "sessionPath": "sessions",
     "headless": true,
-    "clusters": 2,
+    "clusters": 1,
     "errorDiagnostics": true,
     "workers": {
         "doDailySet": true,
