@@ -88,7 +88,7 @@ export class MicrosoftRewardsBot {
     public cookies: { mobile: Cookie[]; desktop: Cookie[] }
     public fingerprint!: BrowserFingerprintWithHeaders
 
-    public browserHTTP: BrowserHTTP  // Add this
+    public browserHTTP: BrowserHTTP
 
     private pointsCanCollect = 0
 
@@ -124,7 +124,7 @@ export class MicrosoftRewardsBot {
         this.config = loadConfig()
         this.activeWorkers = this.config.clusters
         this.exitedWorkers = []
-        this.browserHTTP = new BrowserHTTP(this)  // Initialize BrowserHTTP
+        this.browserHTTP = new BrowserHTTP(this)
     }
 
     get isMobile(): boolean {
@@ -209,7 +209,7 @@ export class MicrosoftRewardsBot {
                     const level = log.level
                     if (webhook.discord?.enabled && webhook.discord.url) {
                         const { url: modifiedUrl, originalHostname } = this.replaceDiscordUrlHostname(webhook.discord.url)
-                        sendDiscord(modifiedUrl, content, level, originalHostname, this)  // Pass 'this' as bot
+                        sendDiscord(modifiedUrl, content, level, originalHostname, this)
                     }
                     if (webhook.ntfy?.enabled && webhook.ntfy.url) {
                         sendNtfy(webhook.ntfy, content, level)
@@ -218,7 +218,7 @@ export class MicrosoftRewardsBot {
             })
         }
 
-        const onWorkerDone = async (label: 'exit' | 'disconnect', worker: Worker, code?: number): Promise<void> => {
+        const onWorkerDone = async (label: 'exit' | 'disconnect', worker: Worker, code?: number): Promise<void> {
             const { pid } = worker.process
             this.activeWorkers -= 1
 
@@ -242,7 +242,7 @@ export class MicrosoftRewardsBot {
                 this.logger.info(
                     'main',
                     'RUN-END',
-                    `Completed all accounts | Accounts processed: ${allAccountStats.length} | Total points collected: +${totalCollectedPoints} | Old total: ${totalInitialPoints} → New total: ${totalFinalPoints} | Total runtime: ${totalDurationMinutes}min`,
+                    `Completed all accounts | Accounts processed: \( {allAccountStats.length} | Total points collected: + \){totalCollectedPoints} | Old total: ${totalInitialPoints} → New total: ${totalFinalPoints} | Total runtime: ${totalDurationMinutes}min`,
                     'green'
                 )
                 await flushAllWebhooks()
@@ -258,7 +258,7 @@ export class MicrosoftRewardsBot {
         })
     }
 
-    private runWorker(runStartTimeFromMaster?: number): void {
+    private runWorker(runStartTime: number): void {
         void this.logger.info('main', 'CLUSTER-WORKER-START', `Worker spawned | PID: ${process.pid}`)
         process.on('message', async ({ chunk, runStartTime }: { chunk: Account[]; runStartTime: number }) => {
             void this.logger.info(
@@ -267,7 +267,7 @@ export class MicrosoftRewardsBot {
                 `Worker ${process.pid} received ${chunk.length} accounts.`
             )
             try {
-                const stats = await this.runTasks(chunk, runStartTime ?? runStartTimeFromMaster ?? Date.now())
+                const stats = await this.runTasks(chunk, runStartTime ?? runStartTime ?? Date.now())
                 if (process.send) {
                     process.send({ __stats: stats })
                 }
@@ -332,7 +332,7 @@ export class MicrosoftRewardsBot {
                     this.logger.info(
                         'main',
                         'ACCOUNT-END',
-                        `Completed account: ${accountEmail} | Total: +${collectedPoints} | Old: ${accountInitialPoints} → New: ${accountFinalPoints} | Duration: ${durationSeconds}s`,
+                        `Completed account: \( {accountEmail} | Total: + \){collectedPoints} | Old: ${accountInitialPoints} → New: ${accountFinalPoints} | Duration: ${durationSeconds}s`,
                         'green'
                     )
                 } else {
@@ -375,7 +375,7 @@ export class MicrosoftRewardsBot {
             this.logger.info(
                 'main',
                 'RUN-END',
-                `Completed all accounts | Accounts processed: ${accountStats.length} | Total points collected: +${totalCollectedPoints} | Old total: ${totalInitialPoints} → New total: ${totalFinalPoints} | Total runtime: ${totalDurationMinutes}min`,
+                `Completed all accounts | Accounts processed: \( {accountStats.length} | Total points collected: + \){totalCollectedPoints} | Old total: ${totalInitialPoints} → New total: ${totalFinalPoints} | Total runtime: ${totalDurationMinutes}min`,
                 'green'
             )
 
@@ -432,7 +432,7 @@ export class MicrosoftRewardsBot {
                     this.logger.warn(
                         'main',
                         'GEO-LOCALE',
-                        `The provided geoLocale is longer than 2 (${this.userData.geoLocale} | auto=${account.geoLocale === 'auto'}), this is likely invalid and can cause errors!`
+                        `The provided geoLocale is longer than 2 (\( {this.userData.geoLocale} | auto= \){account.geoLocale === 'auto'}), this is likely invalid and can cause errors!`
                     )
                 }
 
@@ -484,7 +484,7 @@ export class MicrosoftRewardsBot {
                 this.logger.info(
                     'main',
                     'FLOW',
-                    `Collected: +${collectedPoints} | Mobile: +${mobilePoints} | Desktop: +${desktopPoints} | ${accountEmail}`
+                    `Collected: +\( {collectedPoints} | Mobile: + \){mobilePoints} | Desktop: +${desktopPoints} | ${accountEmail}`
                 )
 
                 return {
