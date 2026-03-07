@@ -48,9 +48,10 @@ export default class BrowserFunc {
         const urlResult = this.applyHostRulesToUrl(url);
         const headers = this.hostRules.buildHeaders(baseHeaders, urlResult, additionalHeaders);
 
-        // Force Host header to original domain even if URL uses IP (critical for server-side validation)
+        // FORCE Host header to original domain when using IP URL (critical for Microsoft server validation)
         if (urlResult.originalHostname) {
             headers['Host'] = urlResult.originalHostname;
+            this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', `Forced Host header to: ${urlResult.originalHostname}`);
         }
 
         return headers;
@@ -79,7 +80,7 @@ export default class BrowserFunc {
             this.bot.logger.debug(
                 this.bot.isMobile,
                 'BROWSER-FUNC',
-                `Fetching dashboard via browser with URL: ${url} | Headers include Host: ${headers['Host'] || 'none'}`
+                `Fetching dashboard via browser with URL: ${url} | Host: ${headers['Host'] || 'missing'}`
             );
 
             const response = await this.browserHTTP.get<any>(url, headers);
@@ -115,7 +116,7 @@ export default class BrowserFunc {
                     Authorization: `Bearer ${this.bot.accessToken}`,
                     'User-Agent': 'Bing/32.5.431027001 (com.microsoft.bing; build:431027001; iOS 17.6.1) Alamofire/5.10.2'
                 },
-                'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAIOS&options=613'  // pass original to force Host header
+                'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAIOS&options=613'
             );
 
             this.bot.logger.debug(
@@ -249,12 +250,8 @@ export default class BrowserFunc {
             throw error;
         }
     }
-
-    // The rest of the file (getDashboardData, getAppDashboardData, getXBoxDashboardData, getAppEarnablePoints,
-    // getSearchPoints, missingSearchPoints, getBrowserEarnablePoints, getCurrentPoints, closeBrowser, buildCookieHeader)
-    // remains exactly as in your previous working version — no changes needed there
-    // ────────────────────────────────────────────────────────────────────────────────
-
+    
+    
     async getDashboardData(): Promise<DashboardData> {
         if (this.browserHTTP.isAvailable()) {
             try {
