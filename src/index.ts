@@ -124,7 +124,7 @@ export class MicrosoftRewardsBot {
         this.config = loadConfig();
         this.activeWorkers = this.config.clusters;
         this.exitedWorkers = [];
-        this.browserHTTP = new BrowserHTTP(this);
+        this.browserHTTP = new BrowserHTTP();  // ← FIXED: no (this) argument
     }
 
     get isMobile(): boolean {

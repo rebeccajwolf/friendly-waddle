@@ -1,8 +1,7 @@
-import type { Page } from 'patchright';
-import type { MicrosoftRewardsBot } from '../index';
+import type { Page } from 'patchright';  // only this import needed
 
 export interface BrowserRequestOptions {
-    method?: string;  // ← Changed: allow any string (matches Axios flexibility)
+    method?: string;
     headers?: Record<string, string>;
     body?: any;
     timeout?: number;
@@ -20,7 +19,7 @@ export class BrowserHTTP {
     private page: Page | null = null;
     private defaultTimeout = 30000;
 
-    constructor() {}  // ← Removed bot param (unused)
+    constructor() {}
 
     setPage(page: Page): void {
         this.page = page;
