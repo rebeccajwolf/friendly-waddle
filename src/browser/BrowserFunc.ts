@@ -24,9 +24,6 @@ export default class BrowserFunc {
         this.browserHTTP = bot.browserHTTP
     }
 
-    /**
-     * Set the browser page for HTTP requests
-     */
     setPage(page: Page): void {
         if (!this.browserHTTP) {
             this.browserHTTP = this.bot.browserHTTP;
@@ -39,32 +36,19 @@ export default class BrowserFunc {
         }
     }
 
-    /**
-     * Check if browser HTTP is available
-     */
     isBrowserHTTPAvailable(): boolean {
         return this.browserHTTP.isAvailable();
     }
 
-    /**
-     * Apply host rules to a URL and get the modified version with original hostname
-     */
     private applyHostRulesToUrl(url: string): { url: string; originalHostname?: string } {
         return this.hostRules.applyHostRules(url);
     }
 
-    /**
-     * Build headers with host rules
-     */
     private buildHeadersWithHostRules(baseHeaders: any, url: string, additionalHeaders?: any): any {
         const urlResult = this.applyHostRulesToUrl(url);
         return this.hostRules.buildHeaders(baseHeaders, urlResult, additionalHeaders);
     }
 
-    /**
-     * Fetch dashboard data using browser-based HTTP
-     * Uses plain domain (relies on --host-rules in browser launch)
-     */
     async getDashboardDataViaBrowser(): Promise<DashboardData> {
         try {
             this.bot.logger.info(this.bot.isMobile, 'BROWSER-FUNC', 'Fetching dashboard data via browser...');
@@ -113,31 +97,27 @@ export default class BrowserFunc {
         }
     }
 
-    /**
-     * Fetch app dashboard data using browser-based HTTP
-     * Uses plain domain (relies on --host-rules in browser launch)
-     */
     async getAppDashboardDataViaBrowser(): Promise<AppDashboardData> {
         try {
-            const plainUrl = 'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAIOS&options=613';
+            const urlResult = this.applyHostRulesToUrl('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAIOS&options=613');
             
-            this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', `Using plain URL for app dashboard: ${plainUrl}`);
+            this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', `Using mapped URL for app dashboard: ${urlResult.url}`);
             
             const headers = this.buildHeadersWithHostRules(
                 {
                     Authorization: `Bearer ${this.bot.accessToken}`,
                     'User-Agent': 'Bing/32.5.431027001 (com.microsoft.bing; build:431027001; iOS 17.6.1) Alamofire/5.10.2'
                 },
-                plainUrl
+                'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAIOS&options=613'
             );
 
             this.bot.logger.debug(
                 this.bot.isMobile,
                 'BROWSER-FUNC',
-                `Fetching app dashboard via browser with plain URL: ${plainUrl}`
+                `Fetching app dashboard via browser with URL: ${urlResult.url}`
             );
 
-            const response = await this.browserHTTP.get<any>(plainUrl, headers);
+            const response = await this.browserHTTP.get<any>(urlResult.url, headers);
             
             this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', `App dashboard response status: ${response.status}`);
 
@@ -156,31 +136,27 @@ export default class BrowserFunc {
         }
     }
 
-    /**
-     * Fetch Xbox dashboard data using browser-based HTTP
-     * Uses plain domain (relies on --host-rules in browser launch)
-     */
     async getXBoxDashboardDataViaBrowser(): Promise<XboxDashboardData> {
         try {
-            const plainUrl = 'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=xboxapp&options=6';
+            const urlResult = this.applyHostRulesToUrl('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=xboxapp&options=6');
             
-            this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', `Using plain URL for Xbox dashboard: ${plainUrl}`);
+            this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', `Using mapped URL for Xbox dashboard: ${urlResult.url}`);
             
             const headers = this.buildHeadersWithHostRules(
                 {
                     Authorization: `Bearer ${this.bot.accessToken}`,
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; Xbox; Xbox One X) AppleWebKit/537.36 (KHTML, like Gecko) Edge/18.19041'
                 },
-                plainUrl
+                'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=xboxapp&options=6'
             );
 
             this.bot.logger.debug(
                 this.bot.isMobile,
                 'BROWSER-FUNC',
-                `Fetching Xbox dashboard via browser with plain URL: ${plainUrl}`
+                `Fetching Xbox dashboard via browser with URL: ${urlResult.url}`
             );
 
-            const response = await this.browserHTTP.get<any>(plainUrl, headers);
+            const response = await this.browserHTTP.get<any>(urlResult.url, headers);
             
             this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', `Xbox dashboard response status: ${response.status}`);
 
@@ -199,33 +175,29 @@ export default class BrowserFunc {
         }
     }
 
-    /**
-     * Get app earnable points using browser-based HTTP
-     * Uses plain domain (relies on --host-rules in browser launch)
-     */
     async getAppEarnablePointsViaBrowser(): Promise<AppEarnablePoints> {
         try {
             const eligibleOffers = ['ENUS_readarticle3_30points', 'Gamification_Sapphire_DailyCheckIn'];
             
-            const plainUrl = 'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAAndroid&options=613';
+            const urlResult = this.applyHostRulesToUrl('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAAndroid&options=613');
             
-            this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', `Using plain URL for app earnable points: ${plainUrl}`);
+            this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', `Using mapped URL for app earnable points: ${urlResult.url}`);
             
             const headers = this.buildHeadersWithHostRules(
                 {
                     Authorization: `Bearer ${this.bot.accessToken}`,
                     'User-Agent': 'Bing/32.5.431027001 (com.microsoft.bing; build:431027001; iOS 17.6.1) Alamofire/5.10.2'
                 },
-                plainUrl
+                'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAAndroid&options=613'
             );
 
             this.bot.logger.debug(
                 this.bot.isMobile,
                 'BROWSER-FUNC',
-                `Fetching app earnable points via browser with plain URL: ${plainUrl}`
+                `Fetching app earnable points via browser with URL: ${urlResult.url}`
             );
 
-            const response = await this.browserHTTP.get<any>(plainUrl, headers);
+            const response = await this.browserHTTP.get<any>(urlResult.url, headers);
             
             this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', `App earnable points response status: ${response.status}`);
 
@@ -271,9 +243,11 @@ export default class BrowserFunc {
         }
     }
 
-    /**
-     * Enhanced getDashboardData with browser HTTP as primary, safeRequest as fallback
-     */
+    // ────────────────────────────────────────────────────────────────────────────────
+    // The remaining methods stay exactly as in your last working version
+    // (getDashboardData, getAppDashboardData, getXBoxDashboardData, getAppEarnablePoints, etc.)
+    // ────────────────────────────────────────────────────────────────────────────────
+
     async getDashboardData(): Promise<DashboardData> {
         if (this.browserHTTP.isAvailable()) {
             try {
@@ -329,9 +303,6 @@ export default class BrowserFunc {
         }
     }
 
-    /**
-     * Enhanced getAppDashboardData with browser HTTP as primary, safeRequest as fallback
-     */
     async getAppDashboardData(): Promise<AppDashboardData> {
         if (this.browserHTTP.isAvailable()) {
             try {
@@ -375,9 +346,6 @@ export default class BrowserFunc {
         }
     }
 
-    /**
-     * Enhanced getXBoxDashboardData with browser HTTP as primary, safeRequest as fallback
-     */
     async getXBoxDashboardData(): Promise<XboxDashboardData> {
         if (this.browserHTTP.isAvailable()) {
             try {
@@ -421,9 +389,6 @@ export default class BrowserFunc {
         }
     }
 
-    /**
-     * Enhanced getAppEarnablePoints with browser HTTP as primary, safeRequest as fallback
-     */
     async getAppEarnablePoints(): Promise<AppEarnablePoints> {
         if (this.browserHTTP.isAvailable()) {
             try {
@@ -500,52 +465,47 @@ export default class BrowserFunc {
         }
     }
 
-    // ────────────────────────────────────────────────────────────────────────────────
-    // The rest of the file (getSearchPoints, missingSearchPoints, getBrowserEarnablePoints,
-    // getCurrentPoints, closeBrowser, buildCookieHeader) remains unchanged
-    // ────────────────────────────────────────────────────────────────────────────────
-
     async getSearchPoints(): Promise<Counters> {
-        const dashboardData = await this.getDashboardData()
-        return dashboardData.userStatus.counters
+        const dashboardData = await this.getDashboardData();
+        return dashboardData.userStatus.counters;
     }
 
     missingSearchPoints(counters: Counters, isMobile: boolean): MissingSearchPoints {
-        const mobileData = counters.mobileSearch?.[0]
-        const desktopData = counters.pcSearch?.[0]
-        const edgeData = counters.pcSearch?.[1]
+        const mobileData = counters.mobileSearch?.[0];
+        const desktopData = counters.pcSearch?.[0];
+        const edgeData = counters.pcSearch?.[1];
 
-        const mobilePoints = mobileData ? Math.max(0, mobileData.pointProgressMax - mobileData.pointProgress) : 0
-        const desktopPoints = desktopData ? Math.max(0, desktopData.pointProgressMax - desktopData.pointProgress) : 0
-        const edgePoints = edgeData ? Math.max(0, edgeData.pointProgressMax - edgeData.pointProgress) : 0
+        const mobilePoints = mobileData ? Math.max(0, mobileData.pointProgressMax - mobileData.pointProgress) : 0;
+        const desktopPoints = desktopData ? Math.max(0, desktopData.pointProgressMax - desktopData.pointProgress) : 0;
+        const edgePoints = edgeData ? Math.max(0, edgeData.pointProgressMax - edgeData.pointProgress) : 0;
 
-        const totalPoints = isMobile ? mobilePoints : desktopPoints + edgePoints
+        const totalPoints = isMobile ? mobilePoints : desktopPoints + edgePoints;
 
-        return { mobilePoints, desktopPoints, edgePoints, totalPoints }
+        return { mobilePoints, desktopPoints, edgePoints, totalPoints };
     }
 
     async getBrowserEarnablePoints(): Promise<BrowserEarnablePoints> {
         try {
-            const data = await this.getDashboardData()
+            const data = await this.getDashboardData();
 
             const desktopSearchPoints =
                 data.userStatus.counters.pcSearch?.reduce(
                     (sum, x) => sum + (x.pointProgressMax - x.pointProgress),
                     0
-                ) ?? 0
+                ) ?? 0;
 
             const mobileSearchPoints =
                 data.userStatus.counters.mobileSearch?.reduce(
                     (sum, x) => sum + (x.pointProgressMax - x.pointProgress),
                     0
-                ) ?? 0
+                ) ?? 0;
 
-            const todayDate = this.bot.utils.getFormattedDate()
+            const todayDate = this.bot.utils.getFormattedDate();
             const dailySetPoints =
                 data.dailySetPromotions[todayDate]?.reduce(
                     (sum, x) => sum + (x.pointProgressMax - x.pointProgress),
                     0
-                ) ?? 0
+                ) ?? 0;
 
             const morePromotionsPoints =
                 data.morePromotions?.reduce((sum, x) => {
@@ -553,12 +513,12 @@ export default class BrowserFunc {
                         ['quiz', 'urlreward'].includes(x.promotionType) &&
                         x.exclusiveLockedFeatureStatus !== 'locked'
                     ) {
-                        return sum + (x.pointProgressMax - x.pointProgress)
+                        return sum + (x.pointProgressMax - x.pointProgress);
                     }
-                    return sum
-                }, 0) ?? 0
+                    return sum;
+                }, 0) ?? 0;
 
-            const totalEarnablePoints = desktopSearchPoints + mobileSearchPoints + dailySetPoints + morePromotionsPoints
+            const totalEarnablePoints = desktopSearchPoints + mobileSearchPoints + dailySetPoints + morePromotionsPoints;
 
             return {
                 dailySetPoints,
@@ -566,53 +526,53 @@ export default class BrowserFunc {
                 desktopSearchPoints,
                 mobileSearchPoints,
                 totalEarnablePoints
-            }
+            };
         } catch (error) {
             this.bot.logger.error(
                 this.bot.isMobile,
                 'GET-BROWSER-EARNABLE-POINTS',
                 `An error occurred: ${error instanceof Error ? error.message : String(error)}`
-            )
-            throw error
+            );
+            throw error;
         }
     }
 
     async getCurrentPoints(): Promise<number> {
         try {
-            const data = await this.getDashboardData()
-            return data.userStatus.availablePoints
+            const data = await this.getDashboardData();
+            return data.userStatus.availablePoints;
         } catch (error) {
             this.bot.logger.error(
                 this.bot.isMobile,
                 'GET-CURRENT-POINTS',
                 `An error occurred: ${error instanceof Error ? error.message : String(error)}`
-            )
-            throw error
+            );
+            throw error;
         }
     }
 
     async closeBrowser(browser: BrowserContext, email: string) {
         try {
-            const cookies = await browser.cookies()
+            const cookies = await browser.cookies();
 
             this.bot.logger.debug(
                 this.bot.isMobile,
                 'CLOSE-BROWSER',
                 `Saving ${cookies.length} cookies to session folder!`
-            )
-            await saveSessionData(this.bot.config.sessionPath, cookies, email, this.bot.isMobile)
+            );
+            await saveSessionData(this.bot.config.sessionPath, cookies, email, this.bot.isMobile);
 
-            await this.bot.utils.wait(2000)
+            await this.bot.utils.wait(2000);
 
-            await browser.close()
-            this.bot.logger.info(this.bot.isMobile, 'CLOSE-BROWSER', 'Browser closed cleanly!')
+            await browser.close();
+            this.bot.logger.info(this.bot.isMobile, 'CLOSE-BROWSER', 'Browser closed cleanly!');
         } catch (error) {
             this.bot.logger.error(
                 this.bot.isMobile,
                 'CLOSE-BROWSER',
                 `An error occurred: ${error instanceof Error ? error.message : String(error)}`
-            )
-            throw error
+            );
+            throw error;
         }
     }
 
@@ -621,16 +581,16 @@ export default class BrowserFunc {
             ...new Map(
                 cookies
                     .filter(c => {
-                        if (!allowedDomains || allowedDomains.length === 0) return true
+                        if (!allowedDomains || allowedDomains.length === 0) return true;
                         return (
                             typeof c.domain === 'string' &&
                             allowedDomains.some(d => c.domain.toLowerCase().endsWith(d.toLowerCase()))
-                        )
+                        );
                     })
                     .map(c => [c.name, c])
             ).values()
         ]
             .map(c => `\( {c.name}= \){c.value}`)
-            .join('; ')
+            .join('; ');
     }
 }
