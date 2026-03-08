@@ -25,6 +25,9 @@ fi
 echo "📋 Current DNS configuration:"
 cat /etc/resolv.conf 2>/dev/null || echo "   (cannot read resolv.conf)"
 
+dig +short prod.rewardsplatform.microsoft.com
+dig +short rewards.bing.com
+
 # Set Node.js options
 export NODE_OPTIONS="--require ./dist/net-patch.js --dns-result-order=ipv4first"
 export UV_THREADPOOL_SIZE=4
