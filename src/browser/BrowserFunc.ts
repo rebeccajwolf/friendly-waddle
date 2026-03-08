@@ -24,9 +24,6 @@ export default class BrowserFunc {
         this.browserHTTP = bot.browserHTTP
     }
 
-    /**
-     * Set the browser page for HTTP requests
-     */
     setPage(page: Page): void {
         if (!this.browserHTTP) {
             this.browserHTTP = this.bot.browserHTTP;
@@ -39,37 +36,26 @@ export default class BrowserFunc {
         }
     }
 
-    /**
-     * Check if browser HTTP is available
-     */
     isBrowserHTTPAvailable(): boolean {
         return this.browserHTTP.isAvailable();
     }
 
-    /**
-     * Apply host rules to a URL and get the modified version with original hostname
-     */
     private applyHostRulesToUrl(url: string): { url: string; originalHostname?: string } {
         return this.hostRules.applyHostRules(url);
     }
 
-    /**
-     * Build headers with host rules
-     */
     private buildHeadersWithHostRules(baseHeaders: any, url: string, additionalHeaders?: any): any {
         const urlResult = this.applyHostRulesToUrl(url);
         return this.hostRules.buildHeaders(baseHeaders, urlResult, additionalHeaders);
     }
 
-    /**
-     * Fetch dashboard data using browser-based HTTP with host rules applied
-     * Uses domain name (works via cookies)
-     */
     async getDashboardDataViaBrowser(): Promise<DashboardData> {
         try {
             this.bot.logger.info(this.bot.isMobile, 'BROWSER-FUNC', 'Fetching dashboard data via browser...');
             
             const url = 'https://rewards.bing.com/api/getuserinfo?type=1';
+            
+            this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', `Using plain URL for dashboard: ${url}`);
             
             const headers = this.buildHeadersWithHostRules(
                 {
@@ -109,10 +95,6 @@ export default class BrowserFunc {
         }
     }
 
-    /**
-     * Fetch app dashboard data using browser-based HTTP
-     * Uses plain domain to allow browser --host-rules to handle IP mapping
-     */
     async getAppDashboardDataViaBrowser(): Promise<AppDashboardData> {
         try {
             const url = 'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAIOS&options=613';
@@ -133,7 +115,6 @@ export default class BrowserFunc {
                 `Fetching app dashboard via browser with URL: ${url}`
             );
 
-            // Log that we're making the request (without exposing full token)
             const tokenPreview = this.bot.accessToken ? this.bot.accessToken.substring(0, 10) + '...' : 'none';
             this.bot.logger.debug(
                 this.bot.isMobile,
@@ -158,10 +139,6 @@ export default class BrowserFunc {
         }
     }
 
-    /**
-     * Fetch Xbox dashboard data using browser-based HTTP
-     * Uses plain domain to allow browser --host-rules to handle IP mapping
-     */
     async getXBoxDashboardDataViaBrowser(): Promise<XboxDashboardData> {
         try {
             const url = 'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=xboxapp&options=6';
@@ -199,10 +176,6 @@ export default class BrowserFunc {
         }
     }
 
-    /**
-     * Get app earnable points using browser-based HTTP
-     * Uses plain domain to allow browser --host-rules to handle IP mapping
-     */
     async getAppEarnablePointsViaBrowser(): Promise<AppEarnablePoints> {
         try {
             const eligibleOffers = ['ENUS_readarticle3_30points', 'Gamification_Sapphire_DailyCheckIn'];
@@ -351,8 +324,7 @@ export default class BrowserFunc {
             const headers = this.hostRules.buildHeaders(
                 {
                     Authorization: `Bearer ${this.bot.accessToken}`,
-                    'User-Agent':
-                        'Bing/32.5.431027001 (com.microsoft.bing; build:431027001; iOS 17.6.1) Alamofire/5.10.2'
+                    'User-Agent': 'Bing/32.5.431027001 (com.microsoft.bing; build:431027001; iOS 17.6.1) Alamofire/5.10.2'
                 },
                 urlResult
             );
@@ -397,8 +369,7 @@ export default class BrowserFunc {
             const headers = this.hostRules.buildHeaders(
                 {
                     Authorization: `Bearer ${this.bot.accessToken}`,
-                    'User-Agent':
-                        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; Xbox; Xbox One X) AppleWebKit/537.36 (KHTML, like Gecko) Edge/18.19041'
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; Xbox; Xbox One X) AppleWebKit/537.36 (KHTML, like Gecko) Edge/18.19041'
                 },
                 urlResult
             );
@@ -445,8 +416,7 @@ export default class BrowserFunc {
             const headers = this.hostRules.buildHeaders(
                 {
                     Authorization: `Bearer ${this.bot.accessToken}`,
-                    'User-Agent':
-                        'Bing/32.5.431027001 (com.microsoft.bing; build:431027001; iOS 17.6.1) Alamofire/5.10.2'
+                    'User-Agent': 'Bing/32.5.431027001 (com.microsoft.bing; build:431027001; iOS 17.6.1) Alamofire/5.10.2'
                 },
                 urlResult
             );
@@ -567,8 +537,8 @@ export default class BrowserFunc {
                 this.bot.isMobile,
                 'GET-BROWSER-EARNABLE-POINTS',
                 `An error occurred: ${error instanceof Error ? error.message : String(error)}`
-            )
-            throw error
+            );
+            throw error;
         }
     }
 
@@ -581,8 +551,8 @@ export default class BrowserFunc {
                 this.bot.isMobile,
                 'GET-CURRENT-POINTS',
                 `An error occurred: ${error instanceof Error ? error.message : String(error)}`
-            )
-            throw error
+            );
+            throw error;
         }
     }
 
@@ -606,8 +576,8 @@ export default class BrowserFunc {
                 this.bot.isMobile,
                 'CLOSE-BROWSER',
                 `An error occurred: ${error instanceof Error ? error.message : String(error)}`
-            )
-            throw error
+            );
+            throw error;
         }
     }
 

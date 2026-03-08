@@ -19,7 +19,7 @@ export class HostRulesManager {
         this.hostRules.set('bing.com', '150.171.28.10')
         this.hostRules.set('www.bing.com', '23.213.34.72')
         this.hostRules.set('account.microsoft.com', '23.216.81.152')
-        this.hostRules.set('prod.rewardsplatform.microsoft.com', '13.107.226.70')
+        this.hostRules.set('prod.rewardsplatform.microsoft.com', '13.107.213.40')
         this.hostRules.set('trends.google.com', '142.250.185.46')
         this.hostRules.set('www.bingapis.com', '150.171.73.13')
         this.hostRules.set('api.bing.com', '150.171.73.13')
