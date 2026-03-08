@@ -2,7 +2,7 @@
 
 set -e
 
-export CHROME_HOST_RULES="MAP rewards.bing.com 150.171.28.10,MAP www.bing.com 150.171.28.10,MAP account.microsoft.com 150.171.28.10,MAP prod.rewardsplatform.microsoft.com 52.190.158.80"
+export CHROME_HOST_RULES="MAP rewards.bing.com 150.171.28.10,MAP www.bing.com 150.171.28.10,MAP account.microsoft.com 150.171.28.10"
 
 echo "========================================="
 echo "🚀 STARTING WITH DNS FIXES"
@@ -95,20 +95,24 @@ else
             # Compare with backup to see if package.json changed
             if [ -f "package.json.bak" ]; then
                 if ! cmp -s "package.json" "package.json.bak"; then
-                    echo "📦 package.json changed, installing dependencies..."
-                    npm ci --ignore-scripts --only=production
+                    echo "📦 package.json changed, installing all dependencies for build..."
+                    npm ci --ignore-scripts
+                    echo "🏗️ Building project..."
+                    npm run build
+                    echo "📦 Removing dev dependencies..."
+                    npm ci --ignore-scripts --omit=dev
                 else
-                    echo "✅ package.json unchanged, skipping dependency install"
+                    echo "✅ package.json unchanged, skipping dependency install and build"
                 fi
             else
-                echo "📦 No previous package.json, installing dependencies..."
-                npm ci --ignore-scripts --only=production
+                echo "📦 No previous package.json, installing all dependencies for build..."
+                npm ci --ignore-scripts
+                echo "🏗️ Building project..."
+                npm run build
+                echo "📦 Removing dev dependencies..."
+                npm ci --ignore-scripts --omit=dev
             fi
         fi
-        
-        # Build the project
-        echo "🏗️ Building project..."
-        npm run build
         
         # Clean up backups
         rm -f package.json.bak package-lock.json.bak
