@@ -2,7 +2,7 @@
 
 set -e
 
-export CHROME_HOST_RULES="MAP rewards.bing.com 150.171.28.10,MAP www.bing.com 150.171.28.10,MAP account.microsoft.com 150.171.28.10"
+export CHROME_HOST_RULES="MAP rewards.bing.com 150.171.28.10,MAP www.bing.com 150.171.28.10,MAP account.microsoft.com 150.171.28.10,MAP prod.rewardsplatform.microsoft.com 52.190.158.80"
 
 echo "========================================="
 echo "🚀 STARTING WITH DNS FIXES"
@@ -46,14 +46,6 @@ if [ -d "dist" ] && [ -n "$(ls -A dist 2>/dev/null)" ]; then
     cp -r dist/* /tmp/app-dist-backup/ 2>/dev/null || true
 fi
 
-# Create backup of node_modules if it exists (for faster restore)
-if [ -d "node_modules" ]; then
-    echo "📦 Backing up node_modules (this may take a moment)..."
-    mkdir -p /tmp/app-node-modules-backup
-    # Only backup if not too large (optional, remove if you have space)
-    # cp -r node_modules/* /tmp/app-node-modules-backup/ 2>/dev/null || true
-fi
-
 # Download latest repo
 echo "📥 Downloading latest repository..."
 TEMP_DIR=$(mktemp -d)
@@ -69,10 +61,12 @@ else
     
     # Extract repo
     unzip -q repo.zip
-    EXTRACTED_DIR=$(find . -maxdepth 1 -type d -name "friendly-waddle-*" | head -1)
+    
+    # Get the top-level folder name from the zip (same as in Dockerfile)
+    EXTRACTED_DIR=$(unzip -Z1 repo.zip | head -n1 | cut -d/ -f1)
     
     if [ -n "$EXTRACTED_DIR" ]; then
-        echo "📂 Extracting to: $EXTRACTED_DIR"
+        echo "📂 Extracting from: $EXTRACTED_DIR"
         
         # Go back to app directory
         cd /home/user/app
@@ -85,6 +79,9 @@ else
         echo "📋 Updating application files..."
         cp -rf $TEMP_DIR/$EXTRACTED_DIR/* . 2>/dev/null || true
         cp -rf $TEMP_DIR/$EXTRACTED_DIR/.* . 2>/dev/null || true
+        
+        # Remove the extracted top-level folder
+        rm -rf $TEMP_DIR/$EXTRACTED_DIR
         
         # Restore dist directory from backup
         if [ -d "/tmp/app-dist-backup" ] && [ -n "$(ls -A /tmp/app-dist-backup 2>/dev/null)" ]; then
@@ -109,7 +106,11 @@ else
             fi
         fi
         
-        # Clean up
+        # Build the project
+        echo "🏗️ Building project..."
+        npm run build
+        
+        # Clean up backups
         rm -f package.json.bak package-lock.json.bak
     else
         echo "⚠️ Could not find extracted directory"
@@ -122,7 +123,6 @@ fi
 
 # Clean up backup directories
 rm -rf /tmp/app-dist-backup 2>/dev/null || true
-# rm -rf /tmp/app-node-modules-backup 2>/dev/null || true
 
 echo "========================================="
 echo "✅ Update check complete"

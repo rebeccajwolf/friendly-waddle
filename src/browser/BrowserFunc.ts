@@ -110,12 +110,12 @@ export default class BrowserFunc {
 
     /**
      * Fetch app dashboard data using browser-based HTTP
-     * Uses IP directly (like axios) to avoid token domain validation issues
+     * Uses domain name (let --host-rules handle IP mapping) to avoid CORS issues
      */
     async getAppDashboardDataViaBrowser(): Promise<AppDashboardData> {
         try {
-            // Use the IP directly instead of domain (like axios does)
-            const urlResult = this.applyHostRulesToUrl('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAIOS&options=613');
+            // Use the DOMAIN name, not IP - host-rules will map it
+            const url = 'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAIOS&options=613';
             
             // Build headers exactly as they are in the axios version
             const headers = this.buildHeadersWithHostRules(
@@ -123,24 +123,24 @@ export default class BrowserFunc {
                     Authorization: `Bearer ${this.bot.accessToken}`,
                     'User-Agent': 'Bing/32.5.431027001 (com.microsoft.bing; build:431027001; iOS 17.6.1) Alamofire/5.10.2'
                 },
-                'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAIOS&options=613'
+                url  // Pass the domain URL for header building
             );
-
+    
             this.bot.logger.debug(
                 this.bot.isMobile,
                 'BROWSER-FUNC',
-                `Fetching app dashboard via browser with URL: ${urlResult.url}`
+                `Fetching app dashboard via browser with URL: ${url} (mapped via host-rules)`
             );
-
-            // Log that we're making the request (without exposing full token)
+    
+            // Log token preview
             const tokenPreview = this.bot.accessToken ? this.bot.accessToken.substring(0, 10) + '...' : 'none';
             this.bot.logger.debug(
                 this.bot.isMobile,
                 'BROWSER-FUNC',
                 `Using Authorization: Bearer ${tokenPreview}`
             );
-
-            const response = await this.browserHTTP.get<any>(urlResult.url, headers);
+    
+            const response = await this.browserHTTP.get<any>(url, headers); // Use domain URL
             
             if (response.status === 200) {
                 return response.data as AppDashboardData;
@@ -159,28 +159,27 @@ export default class BrowserFunc {
 
     /**
      * Fetch Xbox dashboard data using browser-based HTTP
-     * Uses IP directly (like axios) to avoid token domain validation issues
+     * Uses domain name (let --host-rules handle IP mapping) to avoid CORS issues
      */
     async getXBoxDashboardDataViaBrowser(): Promise<XboxDashboardData> {
         try {
-            // Use the IP directly instead of domain (like axios does)
-            const urlResult = this.applyHostRulesToUrl('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=xboxapp&options=6');
+            const url = 'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=xboxapp&options=6';
             
             const headers = this.buildHeadersWithHostRules(
                 {
                     Authorization: `Bearer ${this.bot.accessToken}`,
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; Xbox; Xbox One X) AppleWebKit/537.36 (KHTML, like Gecko) Edge/18.19041'
                 },
-                'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=xboxapp&options=6'
+                url
             );
-
+    
             this.bot.logger.debug(
                 this.bot.isMobile,
                 'BROWSER-FUNC',
-                `Fetching Xbox dashboard via browser with URL: ${urlResult.url}`
+                `Fetching Xbox dashboard via browser with URL: ${url}`
             );
-
-            const response = await this.browserHTTP.get<any>(urlResult.url, headers);
+    
+            const response = await this.browserHTTP.get<any>(url, headers);
             
             if (response.status === 200) {
                 return response.data as XboxDashboardData;
@@ -196,45 +195,43 @@ export default class BrowserFunc {
             throw error;
         }
     }
-
+    
     /**
      * Get app earnable points using browser-based HTTP
-     * Uses IP directly (like axios) to avoid token domain validation issues
+     * Uses domain name (let --host-rules handle IP mapping) to avoid CORS issues
      */
     async getAppEarnablePointsViaBrowser(): Promise<AppEarnablePoints> {
         try {
             const eligibleOffers = ['ENUS_readarticle3_30points', 'Gamification_Sapphire_DailyCheckIn'];
-            
-            // Use the IP directly instead of domain (like axios does)
-            const urlResult = this.applyHostRulesToUrl('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAAndroid&options=613');
+            const url = 'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAAndroid&options=613';
             
             const headers = this.buildHeadersWithHostRules(
                 {
                     Authorization: `Bearer ${this.bot.accessToken}`,
                     'User-Agent': 'Bing/32.5.431027001 (com.microsoft.bing; build:431027001; iOS 17.6.1) Alamofire/5.10.2'
                 },
-                'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAAndroid&options=613'
+                url
             );
-
+    
             this.bot.logger.debug(
                 this.bot.isMobile,
                 'BROWSER-FUNC',
-                `Fetching app earnable points via browser with URL: ${urlResult.url}`
+                `Fetching app earnable points via browser with URL: ${url}`
             );
-
-            const response = await this.browserHTTP.get<any>(urlResult.url, headers);
-
+    
+            const response = await this.browserHTTP.get<any>(url, headers);
+    
             const userData: AppUserData = response.data;
             const eligibleActivities = userData.response.promotions.filter(x =>
                 eligibleOffers.includes(x.attributes.offerid ?? '')
             );
-
+    
             let readToEarn = 0;
             let checkIn = 0;
-
+    
             for (const item of eligibleActivities) {
                 const attrs = item.attributes;
-
+    
                 if (attrs.type === 'msnreadearn') {
                     const pointMax = parseInt(attrs.pointmax ?? '0');
                     const pointProgress = parseInt(attrs.pointprogress ?? '0');
@@ -244,13 +241,13 @@ export default class BrowserFunc {
                     const checkInDay = progress % 7;
                     const lastUpdated = new Date(attrs.last_updated ?? '');
                     const today = new Date();
-
+    
                     if (checkInDay < 6 && today.getDate() !== lastUpdated.getDate()) {
                         checkIn = parseInt(attrs[`day_${checkInDay + 1}_points`] ?? '0');
                     }
                 }
             }
-
+    
             return {
                 readToEarn,
                 checkIn,
