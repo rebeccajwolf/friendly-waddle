@@ -25,9 +25,13 @@ fi
 echo "📋 Current DNS configuration:"
 cat /etc/resolv.conf 2>/dev/null || echo "   (cannot read resolv.conf)"
 
+echo "🔄 Checking for prod..."
 dig +short prod.rewardsplatform.microsoft.com
+echo "🔄 Checking for rewards..."
 dig +short rewards.bing.com
+echo "🔄 Checking for microsoft..."
 dig +short account.microsoft.com
+echo "🔄 Checking for bing..."
 dig +short www.bing.com
 
 # Set Node.js options
