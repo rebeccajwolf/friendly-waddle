@@ -90,29 +90,11 @@ else
             cp -rf /tmp/app-dist-backup/* dist/ 2>/dev/null || true
         fi
         
-        # Check if dependencies need to be updated
-        if [ -f "package.json" ]; then
-            # Compare with backup to see if package.json changed
-            if [ -f "package.json.bak" ]; then
-                if ! cmp -s "package.json" "package.json.bak"; then
-                    echo "📦 package.json changed, installing all dependencies for build..."
-                    npm ci --ignore-scripts
-                    echo "🏗️ Building project..."
-                    npm run build
-                    echo "📦 Removing dev dependencies..."
-                    npm ci --ignore-scripts --omit=dev
-                else
-                    echo "✅ package.json unchanged, skipping dependency install and build"
-                fi
-            else
-                echo "📦 No previous package.json, installing all dependencies for build..."
-                npm ci --ignore-scripts
-                echo "🏗️ Building project..."
-                npm run build
-                echo "📦 Removing dev dependencies..."
-                npm ci --ignore-scripts --omit=dev
-            fi
-        fi
+        # Always install dependencies and force rebuild
+        echo "📦 Forcing dependency install and rebuild..."
+        npm ci --ignore-scripts --only=production
+        echo "🏗️ Forcing project build..."
+        npm run build
         
         # Clean up backups
         rm -f package.json.bak package-lock.json.bak
