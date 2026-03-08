@@ -43,7 +43,115 @@ export class BrowserHTTP {
     }
 
     /**
-     * Make an HTTP request through the browser page
+     * Make a GET request using page.goto (better for authenticated requests)
+     */
+    async getViaGoto<T = any>(url: string, headers?: Record<string, string>): Promise<BrowserResponse<T>> {
+        if (!this.isAvailable()) {
+            throw new Error('Browser page not available for HTTP requests');
+        }
+
+        let lastError: Error | null = null;
+        
+        for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+            try {
+                // Set extra HTTP headers
+                if (headers && Object.keys(headers).length > 0) {
+                    await this.page!.setExtraHTTPHeaders(headers);
+                }
+
+                // Navigate to the URL
+                const response = await this.page!.goto(url, {
+                    timeout: this.defaultTimeout,
+                    waitUntil: 'networkidle'
+                });
+
+                if (!response) {
+                    throw new Error('No response received');
+                }
+
+                // Clear headers to avoid affecting subsequent requests
+                await this.page!.setExtraHTTPHeaders({});
+
+                // Get response body
+                const content = await this.page!.content();
+                let data: any;
+
+                // Try to parse as JSON
+                try {
+                    // Look for JSON in the page content (often in <pre> tags)
+                    const jsonMatch = content.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i);
+                    if (jsonMatch && jsonMatch[1]) {
+                        data = JSON.parse(jsonMatch[1]);
+                    } else {
+                        // Try parsing the whole content as JSON
+                        data = JSON.parse(content);
+                    }
+                } catch (e) {
+                    // If not JSON, return as text
+                    data = content;
+                }
+
+                const status = response.status();
+                
+                this.bot.logger.debug(
+                    this.bot.isMobile,
+                    'BROWSER-HTTP',
+                    `Request successful via goto: ${url} -> ${status} (attempt ${attempt})`
+                );
+
+                return {
+                    status,
+                    statusText: response.statusText(),
+                    headers: response.headers(),
+                    data,
+                    ok: response.ok()
+                } as BrowserResponse<T>;
+
+            } catch (error: any) {
+                lastError = error;
+                this.bot.logger.warn(
+                    this.bot.isMobile,
+                    'BROWSER-HTTP',
+                    `Request failed via goto (attempt ${attempt}/${this.maxRetries}): ${url} - ${error.message}`
+                );
+
+                if (attempt < this.maxRetries) {
+                    const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+        }
+
+        throw lastError || new Error(`Request failed after ${this.maxRetries} attempts: ${url}`);
+    }
+
+    /**
+     * Make a GET request using fetch (fallback for non-authenticated requests)
+     */
+    async getViaFetch<T = any>(url: string, headers?: Record<string, string>): Promise<BrowserResponse<T>> {
+        return this.request<T>(url, { method: 'GET', headers });
+    }
+
+    /**
+     * Make a GET request - automatically chooses the best method
+     */
+    async get<T = any>(url: string, headers?: Record<string, string>): Promise<BrowserResponse<T>> {
+        // For requests with Authorization header, use goto (more reliable)
+        if (headers && headers['Authorization']) {
+            this.bot.logger.debug(
+                this.bot.isMobile,
+                'BROWSER-HTTP',
+                `Using goto method for authenticated request to ${url}`
+            );
+            return this.getViaGoto<T>(url, headers);
+        }
+        
+        // For non-authenticated requests, use fetch
+        return this.getViaFetch<T>(url, headers);
+    }
+
+    /**
+     * Make an HTTP request through the browser page using fetch
      */
     async request<T = any>(url: string, options: BrowserRequestOptions = {}): Promise<BrowserResponse<T>> {
         if (!this.isAvailable()) {
@@ -71,13 +179,12 @@ export class BrowserHTTP {
                                 },
                                 body: body ? JSON.stringify(body) : undefined,
                                 credentials: 'include',
-                                mode: 'cors', // Explicitly set CORS mode
+                                mode: 'cors',
                                 signal: controller.signal
                             });
 
                             clearTimeout(timeoutId);
 
-                            // Get response headers
                             const headersObj: Record<string, string> = {};
                             response.headers.forEach((value, key) => {
                                 headersObj[key] = value;
@@ -86,31 +193,22 @@ export class BrowserHTTP {
                             const contentType = response.headers.get('content-type') || '';
                             let data: any;
 
-                            // Try to parse as JSON first
                             if (contentType.includes('application/json')) {
                                 try {
                                     data = await response.json();
                                 } catch (e) {
-                                    // If JSON parsing fails, try text
                                     const text = await response.text();
                                     try {
-                                        // Attempt to parse text as JSON (sometimes content-type is wrong)
                                         data = JSON.parse(text);
                                     } catch {
-                                        // If all else fails, return as text
                                         data = text;
                                     }
                                 }
                             } else {
-                                // For non-JSON responses, get text
                                 data = await response.text();
-                                
-                                // Try to parse text as JSON anyway (some APIs don't set correct content-type)
                                 try {
                                     data = JSON.parse(data);
-                                } catch {
-                                    // Keep as text if not JSON
-                                }
+                                } catch {}
                             }
 
                             return {
@@ -131,14 +229,7 @@ export class BrowserHTTP {
                 this.bot.logger.debug(
                     this.bot.isMobile,
                     'BROWSER-HTTP',
-                    `Request successful: ${method} ${url} -> ${result.status} (attempt ${attempt})`
-                );
-
-                // Log the data structure for debugging
-                this.bot.logger.debug(
-                    this.bot.isMobile,
-                    'BROWSER-HTTP',
-                    `Response data type: ${typeof result.data}, has dashboard: ${result.data && 'dashboard' in result.data}`
+                    `Request successful via fetch: ${method} ${url} -> ${result.status} (attempt ${attempt})`
                 );
 
                 return result as BrowserResponse<T>;
@@ -148,7 +239,7 @@ export class BrowserHTTP {
                 this.bot.logger.warn(
                     this.bot.isMobile,
                     'BROWSER-HTTP',
-                    `Request failed (attempt ${attempt}/${retries}): ${method} ${url} - ${error.message}`
+                    `Request failed via fetch (attempt ${attempt}/${retries}): ${method} ${url} - ${error.message}`
                 );
 
                 if (attempt < retries) {
@@ -159,13 +250,6 @@ export class BrowserHTTP {
         }
 
         throw lastError || new Error(`Request failed after ${retries} attempts: ${method} ${url}`);
-    }
-
-    /**
-     * Make a GET request
-     */
-    async get<T = any>(url: string, headers?: Record<string, string>): Promise<BrowserResponse<T>> {
-        return this.request<T>(url, { method: 'GET', headers});
     }
 
     /**
