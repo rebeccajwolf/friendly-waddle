@@ -56,32 +56,22 @@ export default class BrowserFunc {
     /**
      * Build headers with host rules
      */
-    private buildHeadersWithHostRules(baseHeaders: any, originalUrl: string, additionalHeaders?: any): any {
-        const urlResult = this.applyHostRulesToUrl(originalUrl);
-        const headers = this.hostRules.buildHeaders(baseHeaders, urlResult, additionalHeaders);
-
-        // FORCE Host header to original domain
-        if (urlResult.originalHostname) {
-            headers['Host'] = urlResult.originalHostname;
-            this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', `Forced Host header to: ${urlResult.originalHostname}`);
-        }
-
-        return headers;
+    private buildHeadersWithHostRules(baseHeaders: any, url: string, additionalHeaders?: any): any {
+        const urlResult = this.applyHostRulesToUrl(url);
+        return this.hostRules.buildHeaders(baseHeaders, urlResult, additionalHeaders);
     }
 
     /**
-     * Fetch dashboard data using browser-based HTTP with host rules applied
-     * Uses domain name (works via cookies)
+     * Fetch dashboard data using browser-based HTTP
+     * Uses plain domain only (as requested) — relies on --host-rules in browser launch
      */
     async getDashboardDataViaBrowser(): Promise<DashboardData> {
         try {
             this.bot.logger.info(this.bot.isMobile, 'BROWSER-FUNC', 'Fetching dashboard data via browser...');
             
-            const originalUrl = 'https://rewards.bing.com/api/getuserinfo?type=1';
+            const url = 'https://rewards.bing.com/api/getuserinfo?type=1';
             
-            const urlResult = this.applyHostRulesToUrl(originalUrl);
-            
-            this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', `Using mapped URL for dashboard: ${urlResult.url} | Original: ${originalUrl}`);
+            this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', `Using plain URL only for dashboard: ${url}`);
             
             const headers = this.buildHeadersWithHostRules(
                 {
@@ -92,16 +82,16 @@ export default class BrowserFunc {
                         'microsoftonline.com'
                     ])
                 },
-                originalUrl  // Pass original non-IP URL to buildHeaders
+                url  // pass plain URL for header building
             );
 
             this.bot.logger.debug(
                 this.bot.isMobile,
                 'BROWSER-FUNC',
-                `Fetching dashboard via browser with URL: ${urlResult.url} | Host header: ${headers['Host'] || 'missing'}`
+                `Fetching dashboard via browser with URL: ${url} | Host header: ${headers['Host'] || 'missing'}`
             );
 
-            const response = await this.browserHTTP.get<any>(urlResult.url, headers);
+            const response = await this.browserHTTP.get<any>(url, headers);
             
             this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', `Dashboard response status: ${response.status}`);
             
@@ -125,34 +115,37 @@ export default class BrowserFunc {
 
     /**
      * Fetch app dashboard data using browser-based HTTP
-     * Uses IP directly for URL, but original non-IP for headers to set correct Host
+     * Uses IP directly (like axios) to avoid token domain validation issues
      */
     async getAppDashboardDataViaBrowser(): Promise<AppDashboardData> {
         try {
-            const originalUrl = 'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAIOS&options=613';
+            const urlResult = this.applyHostRulesToUrl('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAIOS&options=613');
             
-            const urlResult = this.applyHostRulesToUrl(originalUrl);
-            
-            this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', `Using mapped URL for app dashboard: ${urlResult.url} | Original: ${originalUrl}`);
+            this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', `Using mapped URL for app dashboard: ${urlResult.url}`);
             
             const headers = this.buildHeadersWithHostRules(
                 {
                     Authorization: `Bearer ${this.bot.accessToken}`,
                     'User-Agent': 'Bing/32.5.431027001 (com.microsoft.bing; build:431027001; iOS 17.6.1) Alamofire/5.10.2'
                 },
-                originalUrl  // Pass original non-IP URL to buildHeaders for correct Host
+                'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAIOS&options=613'
             );
 
             this.bot.logger.debug(
                 this.bot.isMobile,
                 'BROWSER-FUNC',
-                `Fetching app dashboard via browser with URL: ${urlResult.url} | Host header: ${headers['Host'] || 'missing'}`
+                `Fetching app dashboard via browser with URL: ${urlResult.url}`
+            );
+
+            const tokenPreview = this.bot.accessToken ? this.bot.accessToken.substring(0, 10) + '...' : 'none';
+            this.bot.logger.debug(
+                this.bot.isMobile,
+                'BROWSER-FUNC',
+                `Using Authorization: Bearer ${tokenPreview}`
             );
 
             const response = await this.browserHTTP.get<any>(urlResult.url, headers);
             
-            this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', `App dashboard response status: ${response.status}`);
-
             if (response.status === 200) {
                 return response.data as AppDashboardData;
             } else {
@@ -170,34 +163,28 @@ export default class BrowserFunc {
 
     /**
      * Fetch Xbox dashboard data using browser-based HTTP
-     * Uses IP directly for URL, but original non-IP for headers to set correct Host
+     * Uses IP directly (like axios) to avoid token domain validation issues
      */
     async getXBoxDashboardDataViaBrowser(): Promise<XboxDashboardData> {
         try {
-            const originalUrl = 'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=xboxapp&options=6';
-            
-            const urlResult = this.applyHostRulesToUrl(originalUrl);
-            
-            this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', `Using mapped URL for Xbox dashboard: ${urlResult.url} | Original: ${originalUrl}`);
+            const urlResult = this.applyHostRulesToUrl('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=xboxapp&options=6');
             
             const headers = this.buildHeadersWithHostRules(
                 {
                     Authorization: `Bearer ${this.bot.accessToken}`,
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; Xbox; Xbox One X) AppleWebKit/537.36 (KHTML, like Gecko) Edge/18.19041'
                 },
-                originalUrl  // Pass original non-IP URL to buildHeaders
+                'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=xboxapp&options=6'
             );
 
             this.bot.logger.debug(
                 this.bot.isMobile,
                 'BROWSER-FUNC',
-                `Fetching Xbox dashboard via browser with URL: ${urlResult.url} | Host header: ${headers['Host'] || 'missing'}`
+                `Fetching Xbox dashboard via browser with URL: ${urlResult.url}`
             );
 
             const response = await this.browserHTTP.get<any>(urlResult.url, headers);
             
-            this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', `Xbox dashboard response status: ${response.status}`);
-
             if (response.status === 200) {
                 return response.data as XboxDashboardData;
             } else {
@@ -215,35 +202,29 @@ export default class BrowserFunc {
 
     /**
      * Get app earnable points using browser-based HTTP
-     * Uses IP directly for URL, but original non-IP for headers to set correct Host
+     * Uses IP directly (like axios) to avoid token domain validation issues
      */
     async getAppEarnablePointsViaBrowser(): Promise<AppEarnablePoints> {
         try {
             const eligibleOffers = ['ENUS_readarticle3_30points', 'Gamification_Sapphire_DailyCheckIn'];
             
-            const originalUrl = 'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAAndroid&options=613';
-            
-            const urlResult = this.applyHostRulesToUrl(originalUrl);
-            
-            this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', `Using mapped URL for app earnable points: ${urlResult.url} | Original: ${originalUrl}`);
+            const urlResult = this.applyHostRulesToUrl('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAAndroid&options=613');
             
             const headers = this.buildHeadersWithHostRules(
                 {
                     Authorization: `Bearer ${this.bot.accessToken}`,
                     'User-Agent': 'Bing/32.5.431027001 (com.microsoft.bing; build:431027001; iOS 17.6.1) Alamofire/5.10.2'
                 },
-                originalUrl  // Pass original non-IP URL to buildHeaders
+                'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAAndroid&options=613'
             );
 
             this.bot.logger.debug(
                 this.bot.isMobile,
                 'BROWSER-FUNC',
-                `Fetching app earnable points via browser with URL: ${urlResult.url} | Host header: ${headers['Host'] || 'missing'}`
+                `Fetching app earnable points via browser with URL: ${urlResult.url}`
             );
 
             const response = await this.browserHTTP.get<any>(urlResult.url, headers);
-            
-            this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', `App earnable points response status: ${response.status}`);
 
             const userData: AppUserData = response.data;
             const eligibleActivities = userData.response.promotions.filter(x =>
@@ -286,7 +267,10 @@ export default class BrowserFunc {
             throw error;
         }
     }
-        
+
+    /**
+     * Enhanced getDashboardData with browser HTTP as primary, safeRequest as fallback
+     */
     async getDashboardData(): Promise<DashboardData> {
         if (this.browserHTTP.isAvailable()) {
             try {
