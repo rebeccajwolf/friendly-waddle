@@ -5,6 +5,7 @@ import type { MicrosoftRewardsBot } from '../index'
 import { saveSessionData } from '../util/Load'
 import { HostRulesManager } from '../util/HostRules'
 import { BrowserHTTP } from '../util/BrowserHTTP'
+import { safeRequest } from '../util/safeAxios'
 
 import type { Counters, DashboardData } from './../interface/DashboardData'
 import type { AppUserData } from '../interface/AppUserData'
