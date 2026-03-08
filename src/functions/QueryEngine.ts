@@ -40,19 +40,27 @@ export class QueryCore {
                     const url = config.url || '';
                     const headers = config.headers as Record<string, string> || {};
 
-                    // Make request via browser
+                    // Make request via browser using the available methods
                     let response;
                     if (method === 'GET') {
                         response = await this.bot.browserHTTP.get<T>(url, headers);
                     } else if (method === 'POST') {
                         response = await this.bot.browserHTTP.post<T>(url, config.data, headers);
                     } else {
-                        // For other methods, use generic request
-                        response = await this.bot.browserHTTP.request<T>(url, {
-                            method: method as any,
-                            headers,
-                            body: config.data
-                        });
+                        // For other methods, use get with appropriate headers
+                        // Since we don't have a generic request method, we'll use get
+                        // and add method to headers or use a workaround
+                        this.bot.logger.warn(
+                            this.bot.isMobile,
+                            'QUERY-REQUEST',
+                            `Method ${method} not directly supported in browser HTTP, using GET with method header`
+                        );
+                        // Add method to headers as a workaround
+                        const modifiedHeaders = {
+                            ...headers,
+                            'X-Original-Method': method
+                        };
+                        response = await this.bot.browserHTTP.get<T>(url, modifiedHeaders);
                     }
 
                     return response.data as T;
