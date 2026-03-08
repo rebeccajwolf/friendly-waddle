@@ -2,7 +2,7 @@
 
 set -e
 
-export CHROME_HOST_RULES="MAP rewards.bing.com 150.171.28.10,MAP www.bing.com 150.171.28.10,MAP account.microsoft.com 150.171.28.10,MAP prod.rewardsplatform.microsoft.com 13.107.253.67"
+export CHROME_HOST_RULES="MAP rewards.bing.com 13.107.213.40,MAP www.bing.com 150.171.28.10,MAP account.microsoft.com 150.171.28.10,MAP prod.rewardsplatform.microsoft.com 13.107.246.40"
 
 echo "========================================="
 echo "🚀 STARTING WITH DNS FIXES"
@@ -27,6 +27,8 @@ cat /etc/resolv.conf 2>/dev/null || echo "   (cannot read resolv.conf)"
 
 dig +short prod.rewardsplatform.microsoft.com
 dig +short rewards.bing.com
+dig +short account.microsoft.com
+dig +short www.bing.com
 
 # Set Node.js options
 export NODE_OPTIONS="--require ./dist/net-patch.js --dns-result-order=ipv4first"
