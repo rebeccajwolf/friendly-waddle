@@ -2,7 +2,7 @@
 
 set -e
 
-export CHROME_HOST_RULES="MAP rewards.bing.com 13.107.213.40,MAP www.bing.com 150.171.28.10,MAP account.microsoft.com 150.171.28.10,MAP prod.rewardsplatform.microsoft.com 13.107.246.40"
+export CHROME_HOST_RULES="MAP rewards.bing.com 150.171.28.10,MAP www.bing.com 23.212.250.87,MAP account.microsoft.com 23.222.197.164,MAP prod.rewardsplatform.microsoft.com 13.107.246.40"
 
 echo "========================================="
 echo "🚀 STARTING WITH DNS FIXES"
@@ -33,6 +33,8 @@ echo "🔄 Checking for microsoft..."
 dig +short account.microsoft.com
 echo "🔄 Checking for bing..."
 dig +short www.bing.com
+echo "🔄 Checking for discord..."
+dig +short discord.com
 
 # Set Node.js options
 export NODE_OPTIONS="--require ./dist/net-patch.js --dns-result-order=ipv4first"
