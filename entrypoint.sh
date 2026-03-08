@@ -2,7 +2,7 @@
 
 set -e
 
-export CHROME_HOST_RULES="MAP rewards.bing.com 150.171.28.10,MAP bing.com 150.171.28.10,MAP www.bing.com 2.16.106.196,MAP account.microsoft.com 23.220.113.77,MAP prod.rewardsplatform.microsoft.com 150.171.109.35"
+export CHROME_HOST_RULES="MAP rewards.bing.com 150.171.28.10,MAP bing.com 150.171.28.10,MAP www.bing.com 23.213.34.72,MAP account.microsoft.com 23.216.81.152,MAP prod.rewardsplatform.microsoft.com 13.107.226.70"
 
 echo "========================================="
 echo "🚀 STARTING WITH DNS FIXES"
