@@ -2,7 +2,7 @@
 
 set -e
 
-export CHROME_HOST_RULES="MAP rewards.bing.com 150.171.28.10,MAP bing.com 150.171.28.10,MAP www.bing.com 23.213.34.72,MAP account.microsoft.com 23.216.81.152,MAP prod.rewardsplatform.microsoft.com 13.107.213.40"
+export CHROME_HOST_RULES="MAP rewards.bing.com 150.171.28.10,MAP www.bing.com 150.171.28.10,MAP account.microsoft.com 150.171.28.10,MAP prod.rewardsplatform.microsoft.com 52.190.158.80"
 
 echo "========================================="
 echo "🚀 STARTING WITH DNS FIXES"
@@ -24,17 +24,6 @@ fi
 # Show current DNS config
 echo "📋 Current DNS configuration:"
 cat /etc/resolv.conf 2>/dev/null || echo "   (cannot read resolv.conf)"
-
-echo "🔄 Checking for prod..."
-dig +short prod.rewardsplatform.microsoft.com
-echo "🔄 Checking for rewards..."
-dig +short rewards.bing.com
-echo "🔄 Checking for microsoft..."
-dig +short account.microsoft.com
-echo "🔄 Checking for bing..."
-dig +short www.bing.com
-echo "🔄 Checking for discord..."
-dig +short discord.com
 
 # Set Node.js options
 export NODE_OPTIONS="--require ./dist/net-patch.js --dns-result-order=ipv4first"

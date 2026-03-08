@@ -5,7 +5,6 @@ import type { MicrosoftRewardsBot } from '../index'
 import { saveSessionData } from '../util/Load'
 import { HostRulesManager } from '../util/HostRules'
 import { BrowserHTTP } from '../util/BrowserHTTP'
-import { safeRequest } from '../util/safeAxios'
 
 import type { Counters, DashboardData } from './../interface/DashboardData'
 import type { AppUserData } from '../interface/AppUserData'
@@ -111,22 +110,20 @@ export default class BrowserFunc {
 
     /**
      * Fetch app dashboard data using browser-based HTTP
-     * Uses applyHostRulesToUrl for URL (like axios) while sending request using browser http
+     * Uses IP directly (like axios) to avoid token domain validation issues
      */
     async getAppDashboardDataViaBrowser(): Promise<AppDashboardData> {
         try {
-            const originalUrl = 'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAIOS&options=613';
+            // Use the IP directly instead of domain (like axios does)
+            const urlResult = this.applyHostRulesToUrl('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAIOS&options=613');
             
-            const urlResult = this.applyHostRulesToUrl(originalUrl);
-            
-            this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', `Using mapped URL for app dashboard: ${urlResult.url}`);
-            
+            // Build headers exactly as they are in the axios version
             const headers = this.buildHeadersWithHostRules(
                 {
                     Authorization: `Bearer ${this.bot.accessToken}`,
                     'User-Agent': 'Bing/32.5.431027001 (com.microsoft.bing; build:431027001; iOS 17.6.1) Alamofire/5.10.2'
                 },
-                originalUrl  // Use original non-IP for headers
+                'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAIOS&options=613'
             );
 
             this.bot.logger.debug(
@@ -135,6 +132,7 @@ export default class BrowserFunc {
                 `Fetching app dashboard via browser with URL: ${urlResult.url}`
             );
 
+            // Log that we're making the request (without exposing full token)
             const tokenPreview = this.bot.accessToken ? this.bot.accessToken.substring(0, 10) + '...' : 'none';
             this.bot.logger.debug(
                 this.bot.isMobile,
@@ -161,20 +159,19 @@ export default class BrowserFunc {
 
     /**
      * Fetch Xbox dashboard data using browser-based HTTP
-     * Uses applyHostRulesToUrl for URL (like axios) while sending request using browser http
+     * Uses IP directly (like axios) to avoid token domain validation issues
      */
     async getXBoxDashboardDataViaBrowser(): Promise<XboxDashboardData> {
         try {
-            const originalUrl = 'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=xboxapp&options=6';
-            
-            const urlResult = this.applyHostRulesToUrl(originalUrl);
+            // Use the IP directly instead of domain (like axios does)
+            const urlResult = this.applyHostRulesToUrl('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=xboxapp&options=6');
             
             const headers = this.buildHeadersWithHostRules(
                 {
                     Authorization: `Bearer ${this.bot.accessToken}`,
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; Xbox; Xbox One X) AppleWebKit/537.36 (KHTML, like Gecko) Edge/18.19041'
                 },
-                originalUrl  // Use original non-IP for headers
+                'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=xboxapp&options=6'
             );
 
             this.bot.logger.debug(
@@ -202,22 +199,21 @@ export default class BrowserFunc {
 
     /**
      * Get app earnable points using browser-based HTTP
-     * Uses applyHostRulesToUrl for URL (like axios) while sending request using browser http
+     * Uses IP directly (like axios) to avoid token domain validation issues
      */
     async getAppEarnablePointsViaBrowser(): Promise<AppEarnablePoints> {
         try {
             const eligibleOffers = ['ENUS_readarticle3_30points', 'Gamification_Sapphire_DailyCheckIn'];
             
-            const originalUrl = 'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAAndroid&options=613';
-            
-            const urlResult = this.applyHostRulesToUrl(originalUrl);
+            // Use the IP directly instead of domain (like axios does)
+            const urlResult = this.applyHostRulesToUrl('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAAndroid&options=613');
             
             const headers = this.buildHeadersWithHostRules(
                 {
                     Authorization: `Bearer ${this.bot.accessToken}`,
                     'User-Agent': 'Bing/32.5.431027001 (com.microsoft.bing; build:431027001; iOS 17.6.1) Alamofire/5.10.2'
                 },
-                originalUrl  // Use original non-IP for headers
+                'https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAAndroid&options=613'
             );
 
             this.bot.logger.debug(
@@ -270,10 +266,9 @@ export default class BrowserFunc {
         }
     }
 
-    // ────────────────────────────────────────────────────────────────────────────────
-    // The remaining methods (getDashboardData, getAppDashboardData, etc.) remain unchanged from your pasted code
-    // ────────────────────────────────────────────────────────────────────────────────
-
+    /**
+     * Enhanced getDashboardData with browser HTTP as primary, axios as fallback
+     */
     async getDashboardData(): Promise<DashboardData> {
         // Try browser HTTP first
         if (this.browserHTTP.isAvailable()) {
@@ -284,12 +279,12 @@ export default class BrowserFunc {
                 this.bot.logger.warn(
                     this.bot.isMobile,
                     'GET-DASHBOARD-DATA',
-                    `Browser HTTP failed, falling back to safeRequest: ${browserError instanceof Error ? browserError.message : String(browserError)}`
+                    `Browser HTTP failed, falling back to axios: ${browserError instanceof Error ? browserError.message : String(browserError)}`
                 );
             }
         }
 
-        // Fall back to safeRequest
+        // Fall back to axios
         try {
             const urlResult = this.hostRules.applyHostRules('https://rewards.bing.com/api/getuserinfo?type=1');
             const refererResult = this.hostRules.applyHostRules('https://rewards.bing.com/');
@@ -315,22 +310,25 @@ export default class BrowserFunc {
                 headers
             };
 
-            const response = await safeRequest(this.bot, urlResult.url, request);
+            const response = await this.bot.axios.request(request);
 
             if (response.data?.dashboard) {
                 return response.data.dashboard as DashboardData;
             }
             throw new Error('Dashboard data missing from API response');
-        } catch (safeError) {
+        } catch (axiosError) {
             this.bot.logger.error(
                 this.bot.isMobile,
                 'GET-DASHBOARD-DATA',
-                `Both browser and safeRequest failed: ${safeError instanceof Error ? safeError.message : String(safeError)}`
+                `Both browser and axios failed: ${axiosError instanceof Error ? axiosError.message : String(axiosError)}`
             );
-            throw safeError;
+            throw axiosError;
         }
     }
 
+    /**
+     * Enhanced getAppDashboardData with browser HTTP as primary, axios as fallback
+     */
     async getAppDashboardData(): Promise<AppDashboardData> {
         // Try browser HTTP first
         if (this.browserHTTP.isAvailable()) {
@@ -341,19 +339,20 @@ export default class BrowserFunc {
                 this.bot.logger.warn(
                     this.bot.isMobile,
                     'GET-APP-DASHBOARD-DATA',
-                    `Browser HTTP failed, falling back to safeRequest: ${browserError instanceof Error ? browserError.message : String(browserError)}`
+                    `Browser HTTP failed, falling back to axios: ${browserError instanceof Error ? browserError.message : String(browserError)}`
                 );
             }
         }
 
-        // Fall back to safeRequest
+        // Fall back to axios
         try {
             const urlResult = this.hostRules.applyHostRules('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=SAIOS&options=613');
 
             const headers = this.hostRules.buildHeaders(
                 {
                     Authorization: `Bearer ${this.bot.accessToken}`,
-                    'User-Agent': 'Bing/32.5.431027001 (com.microsoft.bing; build:431027001; iOS 17.6.1) Alamofire/5.10.2'
+                    'User-Agent':
+                        'Bing/32.5.431027001 (com.microsoft.bing; build:431027001; iOS 17.6.1) Alamofire/5.10.2'
                 },
                 urlResult
             );
@@ -364,18 +363,21 @@ export default class BrowserFunc {
                 headers
             };
 
-            const response = await safeRequest(this.bot, urlResult.url, request);
+            const response = await this.bot.axios.request(request);
             return response.data as AppDashboardData;
-        } catch (safeError) {
+        } catch (axiosError) {
             this.bot.logger.error(
                 this.bot.isMobile,
                 'GET-APP-DASHBOARD-DATA',
-                `Both browser and safeRequest failed: ${safeError instanceof Error ? safeError.message : String(safeError)}`
+                `Both browser and axios failed: ${axiosError instanceof Error ? axiosError.message : String(axiosError)}`
             );
-            throw safeError;
+            throw axiosError;
         }
     }
 
+    /**
+     * Enhanced getXBoxDashboardData with browser HTTP as primary, axios as fallback
+     */
     async getXBoxDashboardData(): Promise<XboxDashboardData> {
         // Try browser HTTP first
         if (this.browserHTTP.isAvailable()) {
@@ -386,19 +388,20 @@ export default class BrowserFunc {
                 this.bot.logger.warn(
                     this.bot.isMobile,
                     'GET-XBOX-DASHBOARD-DATA',
-                    `Browser HTTP failed, falling back to safeRequest: ${browserError instanceof Error ? browserError.message : String(browserError)}`
+                    `Browser HTTP failed, falling back to axios: ${browserError instanceof Error ? browserError.message : String(browserError)}`
                 );
             }
         }
 
-        // Fall back to safeRequest
+        // Fall back to axios
         try {
             const urlResult = this.hostRules.applyHostRules('https://prod.rewardsplatform.microsoft.com/dapi/me?channel=xboxapp&options=6');
 
             const headers = this.hostRules.buildHeaders(
                 {
                     Authorization: `Bearer ${this.bot.accessToken}`,
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; Xbox; Xbox One X) AppleWebKit/537.36 (KHTML, like Gecko) Edge/18.19041'
+                    'User-Agent':
+                        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; Xbox; Xbox One X) AppleWebKit/537.36 (KHTML, like Gecko) Edge/18.19041'
                 },
                 urlResult
             );
@@ -409,18 +412,21 @@ export default class BrowserFunc {
                 headers
             };
 
-            const response = await safeRequest(this.bot, urlResult.url, request);
+            const response = await this.bot.axios.request(request);
             return response.data as XboxDashboardData;
-        } catch (safeError) {
+        } catch (axiosError) {
             this.bot.logger.error(
                 this.bot.isMobile,
                 'GET-XBOX-DASHBOARD-DATA',
-                `Both browser and safeRequest failed: ${safeError instanceof Error ? safeError.message : String(safeError)}`
+                `Both browser and axios failed: ${axiosError instanceof Error ? axiosError.message : String(axiosError)}`
             );
-            throw safeError;
+            throw axiosError;
         }
     }
 
+    /**
+     * Enhanced getAppEarnablePoints with browser HTTP as primary, axios as fallback
+     */
     async getAppEarnablePoints(): Promise<AppEarnablePoints> {
         // Try browser HTTP first
         if (this.browserHTTP.isAvailable()) {
@@ -431,12 +437,12 @@ export default class BrowserFunc {
                 this.bot.logger.warn(
                     this.bot.isMobile,
                     'GET-APP-EARNABLE-POINTS',
-                    `Browser HTTP failed, falling back to safeRequest: ${browserError instanceof Error ? browserError.message : String(browserError)}`
+                    `Browser HTTP failed, falling back to axios: ${browserError instanceof Error ? browserError.message : String(browserError)}`
                 );
             }
         }
 
-        // Fall back to safeRequest
+        // Fall back to axios
         try {
             const eligibleOffers = ['ENUS_readarticle3_30points', 'Gamification_Sapphire_DailyCheckIn'];
 
@@ -445,7 +451,8 @@ export default class BrowserFunc {
             const headers = this.hostRules.buildHeaders(
                 {
                     Authorization: `Bearer ${this.bot.accessToken}`,
-                    'User-Agent': 'Bing/32.5.431027001 (com.microsoft.bing; build:431027001; iOS 17.6.1) Alamofire/5.10.2'
+                    'User-Agent':
+                        'Bing/32.5.431027001 (com.microsoft.bing; build:431027001; iOS 17.6.1) Alamofire/5.10.2'
                 },
                 urlResult
             );
@@ -456,7 +463,7 @@ export default class BrowserFunc {
                 headers
             };
 
-            const response = await safeRequest(this.bot, urlResult.url, request);
+            const response = await this.bot.axios.request(request);
             const userData: AppUserData = response.data;
             const eligibleActivities = userData.response.promotions.filter(x =>
                 eligibleOffers.includes(x.attributes.offerid ?? '')
@@ -489,16 +496,19 @@ export default class BrowserFunc {
                 checkIn,
                 totalEarnablePoints: readToEarn + checkIn
             };
-        } catch (safeError) {
+        } catch (axiosError) {
             this.bot.logger.error(
                 this.bot.isMobile,
                 'GET-APP-EARNABLE-POINTS',
-                `Both browser and safeRequest failed: ${safeError instanceof Error ? safeError.message : String(safeError)}`
+                `Both browser and axios failed: ${axiosError instanceof Error ? axiosError.message : String(axiosError)}`
             );
-            throw safeError;
+            throw axiosError;
         }
     }
 
+    /**
+     * Get search point counters
+     */
     async getSearchPoints(): Promise<Counters> {
         const dashboardData = await this.getDashboardData()
         return dashboardData.userStatus.counters
@@ -518,6 +528,9 @@ export default class BrowserFunc {
         return { mobilePoints, desktopPoints, edgePoints, totalPoints }
     }
 
+    /**
+     * Get total earnable points with web browser
+     */
     async getBrowserEarnablePoints(): Promise<BrowserEarnablePoints> {
         try {
             const data = await this.getDashboardData()
@@ -566,11 +579,14 @@ export default class BrowserFunc {
                 this.bot.isMobile,
                 'GET-BROWSER-EARNABLE-POINTS',
                 `An error occurred: ${error instanceof Error ? error.message : String(error)}`
-            );
-            throw error;
+            )
+            throw error
         }
     }
 
+    /**
+     * Get current point amount
+     */
     async getCurrentPoints(): Promise<number> {
         try {
             const data = await this.getDashboardData()
@@ -580,8 +596,8 @@ export default class BrowserFunc {
                 this.bot.isMobile,
                 'GET-CURRENT-POINTS',
                 `An error occurred: ${error instanceof Error ? error.message : String(error)}`
-            );
-            throw error;
+            )
+            throw error
         }
     }
 
@@ -605,8 +621,8 @@ export default class BrowserFunc {
                 this.bot.isMobile,
                 'CLOSE-BROWSER',
                 `An error occurred: ${error instanceof Error ? error.message : String(error)}`
-            );
-            throw error;
+            )
+            throw error
         }
     }
 
@@ -624,7 +640,7 @@ export default class BrowserFunc {
                     .map(c => [c.name, c])
             ).values()
         ]
-            .map(c => `\( {c.name}= \){c.value}`)
+            .map(c => `${c.name}=${c.value}`)
             .join('; ')
     }
 }

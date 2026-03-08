@@ -1,9 +1,8 @@
-import type { AxiosRequestConfig } from 'axios'
+import axios, { AxiosRequestConfig } from 'axios'
 import PQueue from 'p-queue'
 import https from 'https'
 import type { LogLevel } from './Logger'
 import type { MicrosoftRewardsBot } from '../index'
-import { safeRequest } from '../util/safeAxios'  // New import
 
 const DISCORD_LIMIT = 2000
 
@@ -22,6 +21,9 @@ function truncate(text: string) {
     return text.length <= DISCORD_LIMIT ? text : text.slice(0, DISCORD_LIMIT - 14) + ' …(truncated)'
 }
 
+/**
+ * Send Discord webhook via browser if available, otherwise fall back to axios
+ */
 export async function sendDiscord(
     discordUrl: string, 
     content: string, 
@@ -31,7 +33,7 @@ export async function sendDiscord(
 ): Promise<void> {
     if (!discordUrl) return
 
-    // Try browser-based sending first if available
+    // Try browser-based sending first if bot and browser HTTP are available
     if (bot?.browserHTTP?.isAvailable()) {
         try {
             await sendDiscordViaBrowser(discordUrl, content, level, originalHostname, bot);
@@ -40,16 +42,19 @@ export async function sendDiscord(
             bot.logger.warn(
                 false,
                 'DISCORD',
-                `Browser send failed, falling back to safeRequest: ${browserError instanceof Error ? browserError.message : String(browserError)}`
+                `Browser send failed, falling back to axios: ${browserError instanceof Error ? browserError.message : String(browserError)}`
             );
-            // Fall through to safeRequest (which uses Axios with fallback)
+            // Fall through to axios
         }
     }
 
-    // Use safeRequest for fallback (Axios with auto-browser fallback on error)
-    await sendDiscordViaSafeRequest(discordUrl, content, level, originalHostname, bot);
+    // Fall back to axios
+    await sendDiscordViaAxios(discordUrl, content, level, originalHostname, bot);
 }
 
+/**
+ * Send Discord webhook via browser
+ */
 async function sendDiscordViaBrowser(
     discordUrl: string,
     content: string,
@@ -97,7 +102,10 @@ async function sendDiscordViaBrowser(
     });
 }
 
-async function sendDiscordViaSafeRequest(
+/**
+ * Send Discord webhook via axios (original implementation)
+ */
+async function sendDiscordViaAxios(
     discordUrl: string, 
     content: string, 
     level: LogLevel, 
@@ -126,16 +134,16 @@ async function sendDiscordViaSafeRequest(
 
     await discordQueue.add(async () => {
         try {
-            await safeRequest(bot!, discordUrl, request);  // Use safeRequest wrapper
+            await axios(request);
             if (bot) {
                 bot.logger.debug(
                     false,
                     'DISCORD',
-                    `Safe request webhook sent successfully to ${discordUrl.substring(0, 50)}...`
+                    `Axios webhook sent successfully to ${discordUrl.substring(0, 50)}...`
                 );
             }
         } catch (err: any) {
-            const status = err?.status
+            const status = err?.response?.status
             if (status === 429) {
                 if (bot) {
                     bot.logger.debug(false, 'DISCORD', 'Rate limited (429)');
@@ -148,6 +156,7 @@ async function sendDiscordViaSafeRequest(
             if (bot) {
                 bot.logger.error(false, 'DISCORD', errorMsg);
             } else {
+                // Fallback to console if bot not available (shouldn't happen)
                 console.error('[Discord]', errorMsg);
             }
         }
