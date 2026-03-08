@@ -90,9 +90,9 @@ else
             cp -rf /tmp/app-dist-backup/* dist/ 2>/dev/null || true
         fi
         
-        # Always install dependencies and force rebuild
-        echo "📦 Forcing dependency install and rebuild..."
-        npm ci --ignore-scripts --only=production
+        # Always install all dependencies (including dev) and force rebuild
+        echo "📦 Forcing full dependency install (including dev) and rebuild..."
+        npm ci --omit=dev --ignore-scripts
         echo "🏗️ Forcing project build..."
         npm run build
         
