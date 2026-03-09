@@ -39,7 +39,7 @@ echo "========================================="
 echo "🔄 Checking for updates from repository..."
 echo "========================================="
 
-# Create backup of dist directory if it exists (optional safety net)
+# Create backup of dist directory if it exists
 if [ -d "dist" ] && [ -n "$(ls -A dist 2>/dev/null)" ]; then
     echo "📦 Backing up dist directory..."
     mkdir -p /tmp/app-dist-backup
@@ -83,14 +83,14 @@ else
         # Remove the extracted top-level folder
         rm -rf $TEMP_DIR/$EXTRACTED_DIR
         
-        # Restore dist directory from backup (optional - keep existing compiled files)
+        # Restore dist directory from backup (keep existing compiled files)
         if [ -d "/tmp/app-dist-backup" ] && [ -n "$(ls -A /tmp/app-dist-backup 2>/dev/null)" ]; then
             echo "🔄 Restoring dist directory from backup..."
             mkdir -p dist
             cp -rf /tmp/app-dist-backup/* dist/ 2>/dev/null || true
         fi
         
-        # Always copy net-patch.js from freshly downloaded src/ to dist/
+        # Always copy fresh net-patch.js from src/ to dist/ (after update, before build)
         if [ -f "src/net-patch.js" ]; then
             echo "🔄 Copying fresh net-patch.js from src/ to dist/..."
             mkdir -p dist
@@ -99,13 +99,16 @@ else
             echo "⚠️ Warning: src/net-patch.js not found in updated repo!"
         fi
         
-        # Always install full dependencies and force rebuild
+        # Install full dependencies (including dev tools like rimraf/tsc)
         echo "📦 Forcing full dependency install (including dev)..."
         npm ci --ignore-scripts
-        # Add node_modules/.bin to PATH so rimraf is found
+        
+        # Add node_modules/.bin to PATH
         export PATH="./node_modules/.bin:$PATH"
-        echo "🏗️ Forcing project build..."
-        npm run build
+        
+        # Build WITHOUT deleting dist (important!)
+        echo "🏗️ Building project (without cleaning dist)..."
+        tsc  # Only compile TS → do NOT run rimraf dist
         
         # Clean up backups
         rm -f package.json.bak package-lock.json.bak
