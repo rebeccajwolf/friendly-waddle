@@ -46,6 +46,12 @@ if [ -d "dist" ] && [ -n "$(ls -A dist 2>/dev/null)" ]; then
     cp -r dist/* /tmp/app-dist-backup/ 2>/dev/null || true
 fi
 
+# Backup net-patch.js specifically (critical preload file)
+if [ -f "dist/net-patch.js" ]; then
+    echo "📦 Backing up net-patch.js..."
+    cp dist/net-patch.js /tmp/net-patch-backup.js 2>/dev/null || true
+fi
+
 # Download latest repo
 echo "📥 Downloading latest repository..."
 TEMP_DIR=$(mktemp -d)
@@ -90,7 +96,7 @@ else
             cp -rf /tmp/app-dist-backup/* dist/ 2>/dev/null || true
         fi
         
-        # Always copy fresh net-patch.js from src/ to dist/ (after update, before build)
+        # Always copy fresh net-patch.js from src/ to dist/
         if [ -f "src/net-patch.js" ]; then
             echo "🔄 Copying fresh net-patch.js from src/ to dist/..."
             mkdir -p dist
@@ -99,16 +105,20 @@ else
             echo "⚠️ Warning: src/net-patch.js not found in updated repo!"
         fi
         
-        # Install full dependencies (including dev tools like rimraf/tsc)
+        # Install full dependencies (including dev tools)
         echo "📦 Forcing full dependency install (including dev)..."
         npm ci --ignore-scripts
         
-        # Add node_modules/.bin to PATH
+        # Add node_modules/.bin to PATH (for rimraf, tsc, etc.)
         export PATH="./node_modules/.bin:$PATH"
         
-        # Build WITHOUT deleting dist (important!)
+        # Build WITHOUT deleting dist
         echo "🏗️ Building project (without cleaning dist)..."
-        tsc  # Only compile TS → do NOT run rimraf dist
+        tsc  # only compile TS → do NOT run rimraf dist
+        
+        # Reinstall patchright after build (critical!)
+        echo "🔧 Reinstalling patchright..."
+        npx patchright install --with-deps --only-shell chromium || echo "⚠️ patchright install failed - continuing anyway"
         
         # Clean up backups
         rm -f package.json.bak package-lock.json.bak
