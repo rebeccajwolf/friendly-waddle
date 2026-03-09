@@ -80,7 +80,6 @@ export class BrowserHTTP {
 
                 // Get response body
                 let data: any;
-                const contentType = responseHeaders['content-type'] || '';
                 
                 // Try to get JSON from the response directly
                 try {
