@@ -52,9 +52,9 @@ if [ -f "dist/net-patch.js" ]; then
     cp dist/net-patch.js /tmp/net-patch-backup.js 2>/dev/null || true
 fi
 
-# Backup entire node_modules (to preserve patchright, rimraf, etc.)
+# Backup entire node_modules (preserves patchright, @types/*, rimraf, etc.)
 if [ -d "node_modules" ] && [ -n "$(ls -A node_modules 2>/dev/null)" ]; then
-    echo "📦 Backing up node_modules (this may take a while)..."
+    echo "📦 Backing up node_modules..."
     mkdir -p /tmp/app-node-modules-backup
     cp -r node_modules/* /tmp/app-node-modules-backup/ 2>/dev/null || true
 fi
@@ -110,22 +110,22 @@ else
             cp /tmp/net-patch-backup.js dist/net-patch.js
         fi
         
-        # Restore node_modules from backup (preserves patchright!)
+        # Restore node_modules from backup (this preserves patchright and types!)
         if [ -d "/tmp/app-node-modules-backup" ] && [ -n "$(ls -A /tmp/app-node-modules-backup 2>/dev/null)" ]; then
-            echo "🔄 Restoring node_modules from backup (including patchright)..."
+            echo "🔄 Restoring node_modules from backup..."
             mkdir -p node_modules
             cp -rf /tmp/app-node-modules-backup/* node_modules/ 2>/dev/null || true
         else
-            echo "⚠️ No node_modules backup found - running npm ci..."
+            echo "⚠️ No node_modules backup - running full install..."
             npm ci --ignore-scripts
         fi
         
         # Add node_modules/.bin to PATH
         export PATH="./node_modules/.bin:$PATH"
         
-        # Build WITHOUT deleting dist
+        # Build WITHOUT cleaning dist
         echo "🏗️ Building project (without cleaning dist)..."
-        tsc  # only compile TS → no rimraf
+        tsc  # only compile TS files
         
         # Clean up backups
         rm -f package.json.bak package-lock.json.bak
