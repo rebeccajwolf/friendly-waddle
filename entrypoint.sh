@@ -46,6 +46,12 @@ if [ -d "dist" ] && [ -n "$(ls -A dist 2>/dev/null)" ]; then
     cp -r dist/* /tmp/app-dist-backup/ 2>/dev/null || true
 fi
 
+# Backup net-patch.js specifically (critical preload file)
+if [ -f "dist/net-patch.js" ]; then
+    echo "📦 Backing up net-patch.js..."
+    cp dist/net-patch.js /tmp/net-patch-backup.js 2>/dev/null || true
+fi
+
 # Download latest repo
 echo "📥 Downloading latest repository..."
 TEMP_DIR=$(mktemp -d)
@@ -62,7 +68,7 @@ else
     # Extract repo
     unzip -q repo.zip
     
-    # Get the top-level folder name from the zip (same as in Dockerfile)
+    # Get the top-level folder name from the zip
     EXTRACTED_DIR=$(unzip -Z1 repo.zip | head -n1 | cut -d/ -f1)
     
     if [ -n "$EXTRACTED_DIR" ]; then
@@ -90,18 +96,27 @@ else
             cp -rf /tmp/app-dist-backup/* dist/ 2>/dev/null || true
         fi
         
-        # Always install full dependencies (including dev tools like rimraf) and force rebuild
+        # Restore net-patch.js if it was backed up
+        if [ -f "/tmp/net-patch-backup.js" ]; then
+            echo "🔄 Restoring net-patch.js..."
+            mkdir -p dist
+            cp /tmp/net-patch-backup.js dist/net-patch.js
+        fi
+        
+        # Always install full dependencies (including dev) and force rebuild
         echo "📦 Forcing full dependency install (including dev)..."
         npm ci --ignore-scripts
         # Add node_modules/.bin to PATH so rimraf is found
         export PATH="./node_modules/.bin:$PATH"
         echo "🏗️ Forcing project build..."
         npm run build
-        echo "🧹 Pruning dev dependencies..."
-        npm prune --production
+        
+        # DO NOT prune here - keep dev deps until runtime start if needed
+        # (prune is already done in Dockerfile runtime stage)
         
         # Clean up backups
         rm -f package.json.bak package-lock.json.bak
+        rm -f /tmp/net-patch-backup.js
     else
         echo "⚠️ Could not find extracted directory"
         cd /home/user/app
