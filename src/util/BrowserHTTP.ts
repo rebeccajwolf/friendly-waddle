@@ -20,8 +20,8 @@ export interface BrowserResponse<T = any> {
 export class BrowserHTTP {
     private bot: MicrosoftRewardsBot;
     private page: Page | null = null;
-    private defaultTimeout = 60000; // Increased to 60 seconds
-    private maxRetries = 5; // Increased retries
+    private defaultTimeout = 60000; // 60 seconds
+    private maxRetries = 5;
 
     constructor(bot: MicrosoftRewardsBot) {
         this.bot = bot;
@@ -44,8 +44,7 @@ export class BrowserHTTP {
 
     /**
      * Make a GET request by opening a new page and navigating to the URL.
-     * This is the most reliable method because it uses the full browser stack,
-     * respects --host-rules, and avoids CORS issues.
+     * This uses the full browser stack and respects --host-rules.
      */
     async getViaNewPage<T = any>(url: string, headers?: Record<string, string>): Promise<BrowserResponse<T>> {
         if (!this.isAvailable()) {
@@ -79,23 +78,17 @@ export class BrowserHTTP {
                 const statusText = response.statusText();
                 const responseHeaders = response.headers();
 
-                // Get the page content
-                const content = await newPage.content();
-
-                // Try to extract JSON from the page
+                // Get response body (try JSON first, fallback to text)
                 let data: any;
-                try {
-                    // Look for JSON in <pre> tags (common for API responses)
-                    const match = content.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i);
-                    if (match && match[1]) {
-                        data = JSON.parse(match[1]);
-                    } else {
-                        // Try parsing the whole content as JSON
-                        data = JSON.parse(content);
+                const contentType = responseHeaders['content-type'] || '';
+                if (contentType.includes('application/json')) {
+                    try {
+                        data = await response.json();
+                    } catch {
+                        data = await response.text();
                     }
-                } catch (e) {
-                    // If not JSON, return the raw content
-                    data = content;
+                } else {
+                    data = await response.text();
                 }
 
                 this.bot.logger.debug(
@@ -144,24 +137,21 @@ export class BrowserHTTP {
     }
 
     /**
-     * POST method - for now, we can implement it via a page evaluate with fetch
-     * (or throw an error until needed).
+     * POST method (placeholder – not used in current implementation)
      */
     async post<T = any>(url: string, body?: any, headers?: Record<string, string>): Promise<BrowserResponse<T>> {
-        // If you need POST, you can implement it similarly using a new page and JavaScript execution
-        // For now, we'll throw an error as the current bot may not use POST via BrowserHTTP.
         throw new Error('POST not implemented in BrowserHTTP yet');
     }
 
     /**
-     * PUT method
+     * PUT method (placeholder)
      */
     async put<T = any>(url: string, body?: any, headers?: Record<string, string>): Promise<BrowserResponse<T>> {
         throw new Error('PUT not implemented in BrowserHTTP yet');
     }
 
     /**
-     * DELETE method
+     * DELETE method (placeholder)
      */
     async delete<T = any>(url: string, headers?: Record<string, string>): Promise<BrowserResponse<T>> {
         throw new Error('DELETE not implemented in BrowserHTTP yet');
