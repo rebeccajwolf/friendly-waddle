@@ -89,30 +89,33 @@ else
         # Remove the extracted top-level folder
         rm -rf $TEMP_DIR/$EXTRACTED_DIR
         
-        # Restore dist directory from backup
+        # Restore dist directory from backup (but do NOT delete it first)
         if [ -d "/tmp/app-dist-backup" ] && [ -n "$(ls -A /tmp/app-dist-backup 2>/dev/null)" ]; then
             echo "🔄 Restoring dist directory from backup..."
             mkdir -p dist
             cp -rf /tmp/app-dist-backup/* dist/ 2>/dev/null || true
         fi
         
-        # Restore net-patch.js if it was backed up
+        # Restore net-patch.js if backed up
         if [ -f "/tmp/net-patch-backup.js" ]; then
             echo "🔄 Restoring net-patch.js..."
             mkdir -p dist
             cp /tmp/net-patch-backup.js dist/net-patch.js
+        elif [ -f "src/net-patch.js" ]; then
+            echo "🔄 Copying net-patch.js from src/..."
+            mkdir -p dist
+            cp src/net-patch.js dist/net-patch.js
         fi
         
-        # Always install full dependencies (including dev) and force rebuild
+        # Always install full dependencies and build (without rimraf dist)
         echo "📦 Forcing full dependency install (including dev)..."
         npm ci --ignore-scripts
-        # Add node_modules/.bin to PATH so rimraf is found
+        # Add node_modules/.bin to PATH
         export PATH="./node_modules/.bin:$PATH"
-        echo "🏗️ Forcing project build..."
-        npm run build
-        
-        # DO NOT prune here - keep dev deps until runtime start if needed
-        # (prune is already done in Dockerfile runtime stage)
+        echo "🏗️ Building project (without cleaning dist)..."
+        tsc  # Run tsc directly - do NOT run rimraf dist
+        # If you really need clean dist, do it manually before tsc:
+        # rm -rf dist && tsc
         
         # Clean up backups
         rm -f package.json.bak package-lock.json.bak
