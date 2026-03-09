@@ -92,9 +92,11 @@ else
         
         # Always install all dependencies (including dev) and force rebuild
         echo "📦 Forcing full dependency install (including dev) and rebuild..."
-        npm ci --omit=dev --ignore-scripts
+        npm ci --ignore-scripts
         echo "🏗️ Forcing project build..."
         npm run build
+        echo "🧹 Pruning dev dependencies..."
+        npm prune --production
         
         # Clean up backups
         rm -f package.json.bak package-lock.json.bak
