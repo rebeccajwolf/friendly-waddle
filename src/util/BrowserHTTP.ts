@@ -64,10 +64,10 @@ export class BrowserHTTP {
                     await newPage.setExtraHTTPHeaders(headers);
                 }
 
-                // Navigate to the URL
+                // Navigate to the URL with a simpler wait condition
                 const response = await newPage.goto(url, {
                     timeout: this.defaultTimeout,
-                    waitUntil: 'networkidle'
+                    waitUntil: 'domcontentloaded' // Faster and less prone to hanging
                 });
 
                 if (!response) {
@@ -78,17 +78,22 @@ export class BrowserHTTP {
                 const statusText = response.statusText();
                 const responseHeaders = response.headers();
 
-                // Get response body (try JSON first, fallback to text)
+                // Get response body
                 let data: any;
                 const contentType = responseHeaders['content-type'] || '';
-                if (contentType.includes('application/json')) {
-                    try {
-                        data = await response.json();
-                    } catch {
-                        data = await response.text();
-                    }
-                } else {
+                
+                // Try to get JSON from the response directly
+                try {
+                    data = await response.json();
+                } catch {
+                    // If not JSON, get as text
                     data = await response.text();
+                    // Attempt to parse as JSON in case content-type is wrong
+                    try {
+                        data = JSON.parse(data);
+                    } catch {
+                        // Keep as text
+                    }
                 }
 
                 this.bot.logger.debug(

@@ -68,10 +68,8 @@ export default class BrowserFunc {
         try {
             this.bot.logger.info(this.bot.isMobile, 'BROWSER-FUNC', 'Fetching dashboard data via browser...');
             
-            // Use domain name – host rules will map to IP
             const url = 'https://rewards.bing.com/api/getuserinfo?type=1';
             
-            // Build headers with host rules (sets Host header correctly)
             const headers = this.buildHeadersWithHostRules(
                 {
                     ...(this.bot.fingerprint?.headers ?? {}),
@@ -83,13 +81,13 @@ export default class BrowserFunc {
                 },
                 url
             );
-
+    
             this.bot.logger.debug(
                 this.bot.isMobile,
                 'BROWSER-FUNC',
                 `Fetching dashboard via browser with URL: ${url}`
             );
-
+    
             const response = await this.browserHTTP.get<any>(url, headers);
             
             if (response.data && typeof response.data === 'object') {
@@ -109,7 +107,7 @@ export default class BrowserFunc {
             throw error;
         }
     }
-
+    
     /**
      * Fetch app dashboard data using browser-based HTTP
      * Uses domain name (host rules map to IP)
