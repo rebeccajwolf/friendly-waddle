@@ -46,10 +46,17 @@ if [ -d "dist" ] && [ -n "$(ls -A dist 2>/dev/null)" ]; then
     cp -r dist/* /tmp/app-dist-backup/ 2>/dev/null || true
 fi
 
-# Backup net-patch.js specifically (critical preload file)
+# Backup net-patch.js specifically
 if [ -f "dist/net-patch.js" ]; then
     echo "📦 Backing up net-patch.js..."
     cp dist/net-patch.js /tmp/net-patch-backup.js 2>/dev/null || true
+fi
+
+# Backup entire node_modules (to preserve patchright, rimraf, etc.)
+if [ -d "node_modules" ] && [ -n "$(ls -A node_modules 2>/dev/null)" ]; then
+    echo "📦 Backing up node_modules (this may take a while)..."
+    mkdir -p /tmp/app-node-modules-backup
+    cp -r node_modules/* /tmp/app-node-modules-backup/ 2>/dev/null || true
 fi
 
 # Download latest repo
@@ -89,39 +96,41 @@ else
         # Remove the extracted top-level folder
         rm -rf $TEMP_DIR/$EXTRACTED_DIR
         
-        # Restore dist directory from backup (keep existing compiled files)
+        # Restore dist directory from backup
         if [ -d "/tmp/app-dist-backup" ] && [ -n "$(ls -A /tmp/app-dist-backup 2>/dev/null)" ]; then
             echo "🔄 Restoring dist directory from backup..."
             mkdir -p dist
             cp -rf /tmp/app-dist-backup/* dist/ 2>/dev/null || true
         fi
         
-        # Always copy fresh net-patch.js from src/ to dist/
-        if [ -f "src/net-patch.js" ]; then
-            echo "🔄 Copying fresh net-patch.js from src/ to dist/..."
+        # Restore net-patch.js if backed up
+        if [ -f "/tmp/net-patch-backup.js" ]; then
+            echo "🔄 Restoring net-patch.js..."
             mkdir -p dist
-            cp src/net-patch.js dist/net-patch.js
-        else
-            echo "⚠️ Warning: src/net-patch.js not found in updated repo!"
+            cp /tmp/net-patch-backup.js dist/net-patch.js
         fi
         
-        # Install full dependencies (including dev tools)
-        echo "📦 Forcing full dependency install (including dev)..."
-        npm ci --ignore-scripts
+        # Restore node_modules from backup (preserves patchright!)
+        if [ -d "/tmp/app-node-modules-backup" ] && [ -n "$(ls -A /tmp/app-node-modules-backup 2>/dev/null)" ]; then
+            echo "🔄 Restoring node_modules from backup (including patchright)..."
+            mkdir -p node_modules
+            cp -rf /tmp/app-node-modules-backup/* node_modules/ 2>/dev/null || true
+        else
+            echo "⚠️ No node_modules backup found - running npm ci..."
+            npm ci --ignore-scripts
+        fi
         
-        # Add node_modules/.bin to PATH (for rimraf, tsc, etc.)
+        # Add node_modules/.bin to PATH
         export PATH="./node_modules/.bin:$PATH"
         
         # Build WITHOUT deleting dist
         echo "🏗️ Building project (without cleaning dist)..."
-        tsc  # only compile TS → do NOT run rimraf dist
-        
-        # Reinstall patchright after build (critical!)
-        echo "🔧 Reinstalling patchright..."
-        npx patchright install --with-deps --only-shell chromium || echo "⚠️ patchright install failed - continuing anyway"
+        tsc  # only compile TS → no rimraf
         
         # Clean up backups
         rm -f package.json.bak package-lock.json.bak
+        rm -f /tmp/net-patch-backup.js
+        rm -rf /tmp/app-node-modules-backup
     else
         echo "⚠️ Could not find extracted directory"
         cd /home/user/app
