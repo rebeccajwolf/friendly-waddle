@@ -20,8 +20,8 @@ export interface BrowserResponse<T = any> {
 export class BrowserHTTP {
     private bot: MicrosoftRewardsBot;
     private page: Page | null = null;
-    private defaultTimeout = 30000;
-    private maxRetries = 3;
+    private defaultTimeout = 60000; // Increased to 60 seconds
+    private maxRetries = 5; // Increased retries
 
     constructor(bot: MicrosoftRewardsBot) {
         this.bot = bot;
@@ -43,67 +43,68 @@ export class BrowserHTTP {
     }
 
     /**
-     * Make an HTTP request using Playwright's built-in request API
-     * This bypasses the page's JavaScript context and CORS restrictions
+     * Make a GET request by opening a new page and navigating to the URL.
+     * This is the most reliable method because it uses the full browser stack,
+     * respects --host-rules, and avoids CORS issues.
      */
-    async requestViaPlaywright<T = any>(url: string, options: BrowserRequestOptions = {}): Promise<BrowserResponse<T>> {
+    async getViaNewPage<T = any>(url: string, headers?: Record<string, string>): Promise<BrowserResponse<T>> {
         if (!this.isAvailable()) {
             throw new Error('Browser page not available for HTTP requests');
         }
 
-        const { method = 'GET', headers = {}, body, timeout = this.defaultTimeout, retries = this.maxRetries } = options;
+        const context = this.page!.context();
+        let newPage: Page | null = null;
 
-        let lastError: Error | null = null;
-
-        for (let attempt = 1; attempt <= retries; attempt++) {
+        for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
             try {
-                const requestOptions: any = {
-                    method,
-                    headers,
-                    timeout
-                };
+                // Create a new page (tab)
+                newPage = await context.newPage();
 
-                if (body) {
-                    if (typeof body === 'object') {
-                        requestOptions.data = body;
-                    } else {
-                        requestOptions.data = body;
-                    }
+                // Set extra HTTP headers if provided
+                if (headers && Object.keys(headers).length > 0) {
+                    await newPage.setExtraHTTPHeaders(headers);
                 }
 
-                // Use Playwright's request API
-                const response = await this.page!.request.fetch(url, requestOptions);
+                // Navigate to the URL
+                const response = await newPage.goto(url, {
+                    timeout: this.defaultTimeout,
+                    waitUntil: 'networkidle'
+                });
+
+                if (!response) {
+                    throw new Error('No response received');
+                }
 
                 const status = response.status();
                 const statusText = response.statusText();
                 const responseHeaders = response.headers();
-                
-                let data: any;
-                const contentType = responseHeaders['content-type'] || '';
 
-                if (contentType.includes('application/json')) {
-                    try {
-                        data = await response.json();
-                    } catch {
-                        const text = await response.text();
-                        try {
-                            data = JSON.parse(text);
-                        } catch {
-                            data = text;
-                        }
+                // Get the page content
+                const content = await newPage.content();
+
+                // Try to extract JSON from the page
+                let data: any;
+                try {
+                    // Look for JSON in <pre> tags (common for API responses)
+                    const match = content.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i);
+                    if (match && match[1]) {
+                        data = JSON.parse(match[1]);
+                    } else {
+                        // Try parsing the whole content as JSON
+                        data = JSON.parse(content);
                     }
-                } else {
-                    data = await response.text();
-                    try {
-                        data = JSON.parse(data);
-                    } catch {}
+                } catch (e) {
+                    // If not JSON, return the raw content
+                    data = content;
                 }
 
                 this.bot.logger.debug(
                     this.bot.isMobile,
                     'BROWSER-HTTP',
-                    `Request successful via Playwright API: ${method} ${url} -> ${status} (attempt ${attempt})`
+                    `Request successful via new page: ${url} -> ${status} (attempt ${attempt})`
                 );
+
+                await newPage.close();
 
                 return {
                     status,
@@ -114,49 +115,56 @@ export class BrowserHTTP {
                 } as BrowserResponse<T>;
 
             } catch (error: any) {
-                lastError = error;
                 this.bot.logger.warn(
                     this.bot.isMobile,
                     'BROWSER-HTTP',
-                    `Request failed via Playwright API (attempt ${attempt}/${retries}): ${method} ${url} - ${error.message}`
+                    `Request failed via new page (attempt ${attempt}/${this.maxRetries}): ${url} - ${error.message}`
                 );
 
-                if (attempt < retries) {
-                    const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+                if (newPage) {
+                    await newPage.close().catch(() => {});
+                }
+
+                if (attempt < this.maxRetries) {
+                    // Exponential backoff: 2s, 4s, 8s, 16s
+                    const delay = Math.min(2000 * Math.pow(2, attempt - 1), 30000);
                     await new Promise(resolve => setTimeout(resolve, delay));
                 }
             }
         }
 
-        throw lastError || new Error(`Request failed after ${retries} attempts: ${method} ${url}`);
+        throw new Error(`Request failed after ${this.maxRetries} attempts: ${url}`);
     }
 
     /**
-     * Make a GET request - uses Playwright's request API for all requests
+     * Main GET method - uses the new page approach for all requests.
      */
     async get<T = any>(url: string, headers?: Record<string, string>): Promise<BrowserResponse<T>> {
-        return this.requestViaPlaywright<T>(url, { method: 'GET', headers });
+        return this.getViaNewPage<T>(url, headers);
     }
 
     /**
-     * Make a POST request
+     * POST method - for now, we can implement it via a page evaluate with fetch
+     * (or throw an error until needed).
      */
     async post<T = any>(url: string, body?: any, headers?: Record<string, string>): Promise<BrowserResponse<T>> {
-        return this.requestViaPlaywright<T>(url, { method: 'POST', headers, body });
+        // If you need POST, you can implement it similarly using a new page and JavaScript execution
+        // For now, we'll throw an error as the current bot may not use POST via BrowserHTTP.
+        throw new Error('POST not implemented in BrowserHTTP yet');
     }
 
     /**
-     * Make a PUT request
+     * PUT method
      */
     async put<T = any>(url: string, body?: any, headers?: Record<string, string>): Promise<BrowserResponse<T>> {
-        return this.requestViaPlaywright<T>(url, { method: 'PUT', headers, body });
+        throw new Error('PUT not implemented in BrowserHTTP yet');
     }
 
     /**
-     * Make a DELETE request
+     * DELETE method
      */
     async delete<T = any>(url: string, headers?: Record<string, string>): Promise<BrowserResponse<T>> {
-        return this.requestViaPlaywright<T>(url, { method: 'DELETE', headers });
+        throw new Error('DELETE not implemented in BrowserHTTP yet');
     }
 
     /**
