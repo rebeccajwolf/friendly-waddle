@@ -90,9 +90,11 @@ else
             cp -rf /tmp/app-dist-backup/* dist/ 2>/dev/null || true
         fi
         
-        # Always install all dependencies (including dev) and force rebuild
-        echo "📦 Forcing full dependency install (including dev) and rebuild..."
+        # Always install full dependencies (including dev tools like rimraf) and force rebuild
+        echo "📦 Forcing full dependency install (including dev)..."
         npm ci --ignore-scripts
+        # Add node_modules/.bin to PATH so rimraf is found
+        export PATH="./node_modules/.bin:$PATH"
         echo "🏗️ Forcing project build..."
         npm run build
         echo "🧹 Pruning dev dependencies..."
