@@ -43,17 +43,51 @@ export class BrowserHTTP {
     }
 
     /**
-     * Make a GET request using fetch within the existing page.
-     * This avoids navigation flags and respects the browser's full context.
+     * Make a GET request using fetch within a page that matches the target origin.
+     * Creates a temporary page if the current page's origin differs.
      */
     async getViaFetch<T = any>(url: string, headers?: Record<string, string>): Promise<BrowserResponse<T>> {
         if (!this.isAvailable()) {
             throw new Error('Browser page not available for HTTP requests');
         }
 
+        const targetOrigin = new URL(url).origin;
+        const currentOrigin = this.page!.url() ? new URL(this.page!.url()).origin : null;
+
+        // Decide which page to use: reuse current if origins match, otherwise create a temporary page
+        let usedPage: Page = this.page!;
+        let tempPage: Page | null = null;
+
+        if (currentOrigin !== targetOrigin) {
+            this.bot.logger.debug(
+                this.bot.isMobile,
+                'BROWSER-HTTP',
+                `Origin mismatch (current: ${currentOrigin}, target: ${targetOrigin}), creating temporary page`
+            );
+            try {
+                tempPage = await this.page!.context().newPage();
+                // Navigate to the target origin to establish the correct origin for fetch
+                // Using 'domcontentloaded' is enough; we don't need full page load
+                await tempPage.goto(targetOrigin, { waitUntil: 'domcontentloaded', timeout: this.defaultTimeout });
+                usedPage = tempPage;
+            } catch (navError) {
+                this.bot.logger.warn(
+                    this.bot.isMobile,
+                    'BROWSER-HTTP',
+                    `Failed to navigate temporary page to ${targetOrigin}: ${navError instanceof Error ? navError.message : String(navError)}`
+                );
+                // If navigation fails, fall back to current page (may still fail, but we try)
+                if (tempPage) {
+                    await tempPage.close().catch(() => {});
+                    tempPage = null;
+                }
+                usedPage = this.page!;
+            }
+        }
+
         for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
             try {
-                const result = await this.page!.evaluate(
+                const result = await usedPage.evaluate(
                     async ({ url, headers, timeout }) => {
                         const controller = new AbortController();
                         const timeoutId = setTimeout(() => controller.abort(), timeout);
