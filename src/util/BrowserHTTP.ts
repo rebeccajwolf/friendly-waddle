@@ -43,6 +43,21 @@ export class BrowserHTTP {
     }
 
     /**
+     * Filter cookies that are relevant for a given target hostname.
+     * A cookie matches if its domain is a superdomain of the target host.
+     */
+    private filterCookiesForDomain(cookies: any[], targetHost: string): any[] {
+        return cookies.filter(cookie => {
+            if (!cookie.domain) return false;
+            let domain = cookie.domain.toLowerCase();
+            // Remove leading dot for comparison
+            if (domain.startsWith('.')) domain = domain.substring(1);
+            // Check if targetHost is exactly domain or a subdomain
+            return targetHost === domain || targetHost.endsWith('.' + domain);
+        });
+    }
+
+    /**
      * Make a GET request using fetch within a page that matches the target origin.
      * Creates a temporary page if the current page's origin differs.
      */
@@ -51,7 +66,33 @@ export class BrowserHTTP {
             throw new Error('Browser page not available for HTTP requests');
         }
 
-        const targetOrigin = new URL(url).origin;
+        const targetUrl = new URL(url);
+        const targetOrigin = targetUrl.origin;
+        const targetHost = targetUrl.hostname;
+
+        // Get the browser context and ensure the necessary cookies are present
+        const context = this.page!.context();
+        const cookiesToAdd = this.bot.isMobile
+            ? this.filterCookiesForDomain(this.bot.cookies.mobile || [], targetHost)
+            : this.filterCookiesForDomain(this.bot.cookies.desktop || [], targetHost);
+
+        if (cookiesToAdd.length > 0) {
+            try {
+                await context.addCookies(cookiesToAdd);
+                this.bot.logger.debug(
+                    this.bot.isMobile,
+                    'BROWSER-HTTP',
+                    `Added ${cookiesToAdd.length} cookies for domain ${targetHost}`
+                );
+            } catch (cookieError) {
+                this.bot.logger.warn(
+                    this.bot.isMobile,
+                    'BROWSER-HTTP',
+                    `Failed to add cookies: ${cookieError instanceof Error ? cookieError.message : String(cookieError)}`
+                );
+            }
+        }
+
         const currentOrigin = this.page!.url() ? new URL(this.page!.url()).origin : null;
 
         // Decide which page to use: reuse current if origins match, otherwise create a temporary page
@@ -65,9 +106,9 @@ export class BrowserHTTP {
                 `Origin mismatch (current: ${currentOrigin}, target: ${targetOrigin}), creating temporary page`
             );
             try {
-                tempPage = await this.page!.context().newPage();
-                // Navigate to the target origin to establish the correct origin for fetch
-                // Using 'domcontentloaded' is enough; we don't need full page load
+                tempPage = await context.newPage();
+                // Navigate to the target origin to establish the correct origin for fetch.
+                // Use 'domcontentloaded' to avoid waiting for full page load (faster).
                 await tempPage.goto(targetOrigin, { waitUntil: 'domcontentloaded', timeout: this.defaultTimeout });
                 usedPage = tempPage;
             } catch (navError) {
@@ -76,7 +117,7 @@ export class BrowserHTTP {
                     'BROWSER-HTTP',
                     `Failed to navigate temporary page to ${targetOrigin}: ${navError instanceof Error ? navError.message : String(navError)}`
                 );
-                // If navigation fails, fall back to current page (may still fail, but we try)
+                // Fall back to original page if navigation fails (may still fail, but we try)
                 if (tempPage) {
                     await tempPage.close().catch(() => {});
                     tempPage = null;
