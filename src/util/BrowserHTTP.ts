@@ -43,87 +43,83 @@ export class BrowserHTTP {
     }
 
     /**
-     * Make a GET request by opening a new page and navigating to the URL.
-     * This uses the full browser stack and respects --host-rules.
+     * Make a GET request using fetch within the existing page.
+     * This avoids navigation flags and respects the browser's full context.
      */
-    async getViaNewPage<T = any>(url: string, headers?: Record<string, string>): Promise<BrowserResponse<T>> {
+    async getViaFetch<T = any>(url: string, headers?: Record<string, string>): Promise<BrowserResponse<T>> {
         if (!this.isAvailable()) {
             throw new Error('Browser page not available for HTTP requests');
         }
 
-        const context = this.page!.context();
-        let newPage: Page | null = null;
-
         for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
             try {
-                // Create a new page (tab)
-                newPage = await context.newPage();
+                const result = await this.page!.evaluate(
+                    async ({ url, headers, timeout }) => {
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-                // Set extra HTTP headers if provided
-                if (headers && Object.keys(headers).length > 0) {
-                    await newPage.setExtraHTTPHeaders(headers);
-                }
+                        try {
+                            const response = await fetch(url, {
+                                method: 'GET',
+                                headers: headers || {},
+                                credentials: 'include',
+                                signal: controller.signal
+                            });
 
-                // Navigate to the URL with a simpler wait condition
-                const response = await newPage.goto(url, {
-                    timeout: this.defaultTimeout,
-                    waitUntil: 'domcontentloaded' // Faster and less prone to hanging
-                });
+                            clearTimeout(timeoutId);
 
-                if (!response) {
-                    throw new Error('No response received');
-                }
+                            const headersObj: Record<string, string> = {};
+                            response.headers.forEach((value, key) => {
+                                headersObj[key] = value;
+                            });
 
-                const status = response.status();
-                const statusText = response.statusText();
-                const responseHeaders = response.headers();
+                            const contentType = response.headers.get('content-type') || '';
+                            let data: any;
 
-                // Get response body
-                let data: any;
-                
-                // Try to get JSON from the response directly
-                try {
-                    data = await response.json();
-                } catch {
-                    // If not JSON, get as text
-                    data = await response.text();
-                    // Attempt to parse as JSON in case content-type is wrong
-                    try {
-                        data = JSON.parse(data);
-                    } catch {
-                        // Keep as text
-                    }
-                }
+                            if (contentType.includes('application/json')) {
+                                try {
+                                    data = await response.json();
+                                } catch {
+                                    data = await response.text();
+                                }
+                            } else {
+                                data = await response.text();
+                                try {
+                                    data = JSON.parse(data);
+                                } catch {}
+                            }
+
+                            return {
+                                status: response.status,
+                                statusText: response.statusText,
+                                headers: headersObj,
+                                data,
+                                ok: response.ok
+                            };
+                        } catch (error: any) {
+                            clearTimeout(timeoutId);
+                            throw new Error(`Fetch failed: ${error.message}`);
+                        }
+                    },
+                    { url, headers, timeout: this.defaultTimeout }
+                );
 
                 this.bot.logger.debug(
                     this.bot.isMobile,
                     'BROWSER-HTTP',
-                    `Request successful via new page: ${url} -> ${status} (attempt ${attempt})`
+                    `Request successful via fetch: ${url} -> ${result.status} (attempt ${attempt})`
                 );
 
-                await newPage.close();
-
-                return {
-                    status,
-                    statusText,
-                    headers: responseHeaders,
-                    data,
-                    ok: status >= 200 && status < 300
-                } as BrowserResponse<T>;
+                return result as BrowserResponse<T>;
 
             } catch (error: any) {
                 this.bot.logger.warn(
                     this.bot.isMobile,
                     'BROWSER-HTTP',
-                    `Request failed via new page (attempt ${attempt}/${this.maxRetries}): ${url} - ${error.message}`
+                    `Request failed via fetch (attempt ${attempt}/${this.maxRetries}): ${url} - ${error.message}`
                 );
 
-                if (newPage) {
-                    await newPage.close().catch(() => {});
-                }
-
                 if (attempt < this.maxRetries) {
-                    // Exponential backoff: 2s, 4s, 8s, 16s
                     const delay = Math.min(2000 * Math.pow(2, attempt - 1), 30000);
                     await new Promise(resolve => setTimeout(resolve, delay));
                 }
@@ -134,14 +130,14 @@ export class BrowserHTTP {
     }
 
     /**
-     * Main GET method - uses the new page approach for all requests.
+     * Main GET method - uses fetch in the existing page.
      */
     async get<T = any>(url: string, headers?: Record<string, string>): Promise<BrowserResponse<T>> {
-        return this.getViaNewPage<T>(url, headers);
+        return this.getViaFetch<T>(url, headers);
     }
 
     /**
-     * POST method (placeholder – not used in current implementation)
+     * POST method (placeholder – can be implemented similarly if needed)
      */
     async post<T = any>(url: string, body?: any, headers?: Record<string, string>): Promise<BrowserResponse<T>> {
         throw new Error('POST not implemented in BrowserHTTP yet');
