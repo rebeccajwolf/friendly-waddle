@@ -30,6 +30,7 @@ type LoginState =
     | 'OTP_CODE_ENTRY'
     | 'UNKNOWN'
     | 'CHROMEWEBDATA_ERROR'
+    | 'WELCOME_PAGE'
 
 export class Login {
     emailLogin: EmailLogin
@@ -63,7 +64,9 @@ export class Login {
         bingProfile: '#id_n',
         requestToken: 'input[name="__RequestVerificationToken"]',
         requestTokenMeta: 'meta[name="__RequestVerificationToken"]',
-        otpInput: 'div[data-testid="codeEntry"]'
+        otpInput: 'div[data-testid="codeEntry"]',
+        startEarningButton: '//*[@id="start-earning-rewards-link"]',   // NEW
+        welcomePageIndicator: 'text=Start earning rewards'             // NEW fallback
     } as const
 
     constructor(private bot: MicrosoftRewardsBot) {
@@ -262,7 +265,8 @@ export class Login {
             'GET_A_CODE',
             'GET_A_CODE_2',
             'LOGIN_PASSWORDLESS',
-            '2FA_TOTP'
+            '2FA_TOTP',
+            'WELCOME_PAGE'
         ]
 
         for (const priority of priorities) {
