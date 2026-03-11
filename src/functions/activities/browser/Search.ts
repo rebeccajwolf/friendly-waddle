@@ -403,33 +403,55 @@ export class Search extends Workers {
         }
     }
 
-    private async clickRandomLink(page: Page, isMobile: boolean) {
+    private async clickRandomResult(page: Page) {
+        // Find all potential result links
+        const links = await page.$$('#b_results .b_algo h2 a');
+    
+        if (links.length === 0) {
+            this.bot.logger.debug(this.bot.isMobile, 'SEARCH', 'No clickable results found');
+            return;
+        }
+    
+        // Pick one random link
+        const randomIndex = Math.floor(Math.random() * links.length);
+        const selectedLink = links[randomIndex];
+    
+        let url: string;
         try {
-            this.bot.logger.debug(isMobile, 'SEARCH-RANDOM-CLICK', 'Attempting to click a random search result link')
-
-            const searchPageUrl = page.url()
-
-            await this.bot.browser.utils.ghostClick(page, '#b_results .b_algo h2')
-            await this.bot.utils.wait(this.bot.config.searchSettings.searchResultVisitTime)
-
-            if (isMobile) {
-                await page.goto(searchPageUrl)
-                this.bot.logger.debug(isMobile, 'SEARCH-RANDOM-CLICK', 'Navigated back to search page')
-            } else {
-                const newTab = await this.bot.browser.utils.getLatestTab(page)
-                const newTabUrl = newTab.url()
-
-                this.bot.logger.debug(isMobile, 'SEARCH-RANDOM-CLICK', `Visited result tab | url=${newTabUrl}`)
-
-                await this.bot.browser.utils.closeTabs(newTab)
-                this.bot.logger.debug(isMobile, 'SEARCH-RANDOM-CLICK', 'Closed result tab')
-            }
-        } catch (error) {
-            this.bot.logger.error(
-                isMobile,
-                'SEARCH-RANDOM-CLICK',
-                `An error occurred during random click | message=${error instanceof Error ? error.message : String(error)}`
-            )
+            url = await selectedLink.getAttribute('href') || '';
+            if (!url) return;
+        } catch {
+            return;
+        }
+    
+        this.bot.logger.info(this.bot.isMobile, 'SEARCH-RANDOM-CLICK', `Visiting result: ${url}`);
+    
+        try {
+            // Navigate on the SAME page (no new tab)
+            await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    
+            // Wait the configured time (simulates "reading")
+            const visitTimeMs = this.bot.utils.parseDurationToMs(
+                this.bot.config.searchSettings.searchResultVisitTime || '30sec'
+            );
+            await this.bot.utils.wait(visitTimeMs);
+    
+            // Go back to search results
+            await page.goBack({ waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => {
+                this.bot.logger.debug(this.bot.isMobile, 'SEARCH', 'goBack failed, reloading search page');
+                page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+            });
+    
+            // Small safety wait
+            await this.bot.utils.wait(2000 + Math.random() * 2000);
+    
+            this.bot.logger.info(this.bot.isMobile, 'SEARCH-RANDOM-CLICK', 'Returned to search results');
+        } catch (err) {
+            this.bot.logger.warn(this.bot.isMobile, 'SEARCH-RANDOM-CLICK', `Click failed: ${err}`);
+            // Fallback: reload search page if stuck
+            await page.goto('https://www.bing.com/search?q=' + encodeURIComponent(page.url().split('q=')[1] || ''), {
+                waitUntil: 'domcontentloaded'
+            }).catch(() => {});
         }
     }
 }

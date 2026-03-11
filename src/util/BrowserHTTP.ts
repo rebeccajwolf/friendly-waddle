@@ -58,10 +58,52 @@ export class BrowserHTTP {
     }
 
     /**
-     * Make a GET request using fetch within a page that matches the target origin.
-     * Creates a temporary page if the current page's origin differs.
+     * Prepare body and adjust headers for fetch.
+     * Returns the body as a string and updates headers with appropriate Content-Type if needed.
      */
-    async getViaFetch<T = any>(url: string, headers?: Record<string, string>): Promise<BrowserResponse<T>> {
+    private prepareBodyAndHeaders(body: any, headers: Record<string, string> = {}): { bodyString: string | undefined, headers: Record<string, string> } {
+        const resultHeaders = { ...headers };
+
+        // If body is undefined or null, return as is
+        if (body === undefined || body === null) {
+            return { bodyString: undefined, headers: resultHeaders };
+        }
+
+        // Handle URLSearchParams
+        if (typeof URLSearchParams !== 'undefined' && body instanceof URLSearchParams) {
+            // Convert to string and ensure content type
+            const bodyString = body.toString();
+            if (!resultHeaders['Content-Type'] && !resultHeaders['content-type']) {
+                resultHeaders['Content-Type'] = 'application/x-www-form-urlencoded;charset=UTF-8';
+            }
+            return { bodyString, headers: resultHeaders };
+        }
+
+        // Handle plain objects (assume JSON)
+        if (typeof body === 'object' && !(body instanceof String) && !(body instanceof Blob) && !(body instanceof ArrayBuffer) && !(body instanceof FormData)) {
+            const bodyString = JSON.stringify(body);
+            if (!resultHeaders['Content-Type'] && !resultHeaders['content-type']) {
+                resultHeaders['Content-Type'] = 'application/json';
+            }
+            return { bodyString, headers: resultHeaders };
+        }
+
+        // For strings or other types (Blob, FormData, etc.), pass through as is
+        // But note: passing FormData through evaluate is tricky; we'll assume string for now.
+        // If it's a string, we return it directly. Caller must set appropriate Content-Type if needed.
+        return { bodyString: body, headers: resultHeaders };
+    }
+
+    /**
+     * Make a request using fetch within a page that matches the target origin.
+     * Generic method used by both GET and POST.
+     */
+    private async requestViaFetch<T = any>(
+        method: 'GET' | 'POST',
+        url: string,
+        headers?: Record<string, string>,
+        body?: any
+    ): Promise<BrowserResponse<T>> {
         if (!this.isAvailable()) {
             throw new Error('Browser page not available for HTTP requests');
         }
@@ -126,17 +168,27 @@ export class BrowserHTTP {
             }
         }
 
+        // Prepare body and headers for POST
+        let finalHeaders = headers || {};
+        let finalBody: string | undefined;
+        if (method === 'POST') {
+            const prepared = this.prepareBodyAndHeaders(body, finalHeaders);
+            finalBody = prepared.bodyString;
+            finalHeaders = prepared.headers;
+        }
+
         for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
             try {
                 const result = await usedPage.evaluate(
-                    async ({ url, headers, timeout }) => {
+                    async ({ method, url, headers, body, timeout }) => {
                         const controller = new AbortController();
                         const timeoutId = setTimeout(() => controller.abort(), timeout);
 
                         try {
                             const response = await fetch(url, {
-                                method: 'GET',
+                                method,
                                 headers: headers || {},
+                                body: body,
                                 credentials: 'include',
                                 signal: controller.signal
                             });
@@ -176,13 +228,13 @@ export class BrowserHTTP {
                             throw new Error(`Fetch failed: ${error.message}`);
                         }
                     },
-                    { url, headers, timeout: this.defaultTimeout }
+                    { method, url, headers: finalHeaders, body: finalBody, timeout: this.defaultTimeout }
                 );
 
                 this.bot.logger.debug(
                     this.bot.isMobile,
                     'BROWSER-HTTP',
-                    `Request successful via fetch: ${url} -> ${result.status} (attempt ${attempt})`
+                    `Request successful via fetch: ${method} ${url} -> ${result.status} (attempt ${attempt})`
                 );
 
                 return result as BrowserResponse<T>;
@@ -191,7 +243,7 @@ export class BrowserHTTP {
                 this.bot.logger.warn(
                     this.bot.isMobile,
                     'BROWSER-HTTP',
-                    `Request failed via fetch (attempt ${attempt}/${this.maxRetries}): ${url} - ${error.message}`
+                    `Request failed via fetch (attempt ${attempt}/${this.maxRetries}): ${method} ${url} - ${error.message}`
                 );
 
                 if (attempt < this.maxRetries) {
@@ -201,25 +253,27 @@ export class BrowserHTTP {
             }
         }
 
-        throw new Error(`Request failed after ${this.maxRetries} attempts: ${url}`);
+        throw new Error(`Request failed after ${this.maxRetries} attempts: ${method} ${url}`);
     }
 
     /**
-     * Main GET method - uses fetch in the existing page.
+     * Make a GET request using fetch within the existing page.
      */
     async get<T = any>(url: string, headers?: Record<string, string>): Promise<BrowserResponse<T>> {
-        return this.getViaFetch<T>(url, headers);
+        return this.requestViaFetch<T>('GET', url, headers);
     }
 
     /**
-     * POST method (placeholder – can be implemented similarly if needed)
+     * Make a POST request using fetch within the existing page.
+     * Supports URLSearchParams, objects (converted to JSON), and strings.
+     * Appropriate Content-Type headers are added if not already present.
      */
     async post<T = any>(url: string, body?: any, headers?: Record<string, string>): Promise<BrowserResponse<T>> {
-        throw new Error('POST not implemented in BrowserHTTP yet');
+        return this.requestViaFetch<T>('POST', url, headers, body);
     }
 
     /**
-     * PUT method (placeholder)
+     * PUT method (placeholder – can be implemented similarly if needed)
      */
     async put<T = any>(url: string, body?: any, headers?: Record<string, string>): Promise<BrowserResponse<T>> {
         throw new Error('PUT not implemented in BrowserHTTP yet');
