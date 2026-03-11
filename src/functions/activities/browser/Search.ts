@@ -25,13 +25,13 @@ export class Search extends Workers {
             this.bot.logger.debug(
                 isMobile,
                 'SEARCH-BING',
-                `Initial search counters | mobile=${missingPoints.mobilePoints} | desktop=${missingPoints.desktopPoints} | edge=${missingPoints.edgePoints}`
+                `Initial search counters | mobile=\( {missingPoints.mobilePoints} | desktop= \){missingPoints.desktopPoints} | edge=${missingPoints.edgePoints}`
             )
 
             this.bot.logger.info(
                 isMobile,
                 'SEARCH-BING',
-                `Search points remaining | Edge=${missingPoints.edgePoints} | Desktop=${missingPoints.desktopPoints} | Mobile=${missingPoints.mobilePoints}`
+                `Search points remaining | Edge=\( {missingPoints.edgePoints} | Desktop= \){missingPoints.desktopPoints} | Mobile=${missingPoints.mobilePoints}`
             )
 
             const queryCore = new QueryCore(this.bot)
@@ -41,7 +41,7 @@ export class Search extends Workers {
             this.bot.logger.debug(
                 isMobile,
                 'SEARCH-BING',
-                `Resolving search queries via QueryCore | locale=${locale} | lang=${langCode} | related=true`
+                `Resolving search queries via QueryCore | locale=\( {locale} | lang= \){langCode} | related=true`
             )
 
             let queries = await queryCore.queryManager({
@@ -82,7 +82,7 @@ export class Search extends Workers {
                     this.bot.logger.info(
                         isMobile,
                         'SEARCH-BING',
-                        `No points gained ${stagnantLoop}/${stagnantLoopMax} | query="${query}" | remaining=${newMissingPointsTotal}`
+                        `No points gained \( {stagnantLoop}/ \){stagnantLoopMax} | query="\( {query}" | remaining= \){newMissingPointsTotal}`
                     )
                 } else {
                     stagnantLoop = 0
@@ -96,7 +96,7 @@ export class Search extends Workers {
                     this.bot.logger.info(
                         isMobile,
                         'SEARCH-BING',
-                        `gainedPoints=${gainedPoints} points | query="${query}" | remaining=${newMissingPointsTotal}`,
+                        `gainedPoints=\( {gainedPoints} points | query=" \){query}" | remaining=${newMissingPointsTotal}`,
                         'green'
                     )
                 }
@@ -128,7 +128,7 @@ export class Search extends Workers {
                     this.bot.logger.warn(
                         isMobile,
                         'SEARCH-BING',
-                        `Low query buffer while still missing points, regenerating | remainingQueries=${remainingQueries} | missing=${missingPointsTotal}`
+                        `Low query buffer while still missing points, regenerating | remainingQueries=\( {remainingQueries} | missing= \){missingPointsTotal}`
                     )
 
                     const extra = await queryCore.queryManager({
@@ -180,7 +180,7 @@ export class Search extends Workers {
                         this.bot.logger.info(
                             isMobile,
                             'SEARCH-BING-EXTRA',
-                            `Extra search | remaining=${missingPointsTotal} | query="${query}"`
+                            `Extra search | remaining=\( {missingPointsTotal} | query=" \){query}"`
                         )
 
                         searchCounters = await this.bingSearch(page, query, isMobile)
@@ -195,7 +195,7 @@ export class Search extends Workers {
                             this.bot.logger.info(
                                 isMobile,
                                 'SEARCH-BING-EXTRA',
-                                `No points gained ${stagnantLoop}/${stagnantLoopMax} | query="${query}" | remaining=${newMissingPointsTotal}`
+                                `No points gained \( {stagnantLoop}/ \){stagnantLoopMax} | query="\( {query}" | remaining= \){newMissingPointsTotal}`
                             )
                         } else {
                             stagnantLoop = 0
@@ -209,7 +209,7 @@ export class Search extends Workers {
                             this.bot.logger.info(
                                 isMobile,
                                 'SEARCH-BING-EXTRA',
-                                `gainedPoints=${gainedPoints} points | query="${query}" | remaining=${newMissingPointsTotal}`,
+                                `gainedPoints=\( {gainedPoints} points | query=" \){query}" | remaining=${newMissingPointsTotal}`,
                                 'green'
                             )
                         }
@@ -235,7 +235,7 @@ export class Search extends Workers {
                             this.bot.logger.info(
                                 isMobile,
                                 'SEARCH-BING',
-                                `Aborted extra searches | startBalance=${startBalance} | finalBalance=${finalBalance}`
+                                `Aborted extra searches | startBalance=\( {startBalance} | finalBalance= \){finalBalance}`
                             )
                             return totalGainedPoints
                         }
@@ -248,7 +248,7 @@ export class Search extends Workers {
             this.bot.logger.info(
                 isMobile,
                 'SEARCH-BING',
-                `Completed Bing searches | startBalance=${startBalance} | newBalance=${finalBalance}`
+                `Completed Bing searches | startBalance=\( {startBalance} | newBalance= \){finalBalance}`
             )
 
             return totalGainedPoints
@@ -272,13 +272,13 @@ export class Search extends Workers {
             this.bot.logger.info(
                 isMobile,
                 'SEARCH-BING',
-                `Returning to home page to clear accumulated page context | count=${this.searchCount} | threshold=${refreshThreshold}`
+                `Returning to home page to clear accumulated page context | count=\( {this.searchCount} | threshold= \){refreshThreshold}`
             )
 
             this.bot.logger.debug(isMobile, 'SEARCH-BING', `Returning home to refresh state | url=${this.bingHome}`)
 
             const cvid = randomBytes(16).toString('hex')
-            const url = `${this.bingHome}/search?q=${encodeURIComponent(query)}&PC=U531&FORM=ANNTA1&cvid=${cvid}`
+            const url = `\( {this.bingHome}/search?q= \){encodeURIComponent(query)}&PC=U531&FORM=ANNTA1&cvid=${cvid}`
 
             await searchPage.goto(url)
             await searchPage.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {})
@@ -288,7 +288,7 @@ export class Search extends Workers {
         this.bot.logger.debug(
             isMobile,
             'SEARCH-BING',
-            `Starting bingSearch | query="${query}" | maxAttempts=${maxAttempts} | searchCount=${this.searchCount} | refreshEvery=${refreshThreshold} | scrollRandomResults=${this.bot.config.searchSettings.scrollRandomResults} | clickRandomResults=${this.bot.config.searchSettings.clickRandomResults}`
+            `Starting bingSearch | query="\( {query}" | maxAttempts= \){maxAttempts} | searchCount=\( {this.searchCount} | refreshEvery= \){refreshThreshold} | scrollRandomResults=\( {this.bot.config.searchSettings.scrollRandomResults} | clickRandomResults= \){this.bot.config.searchSettings.clickRandomResults}`
         )
 
         for (let i = 0; i < maxAttempts; i++) {
@@ -313,7 +313,7 @@ export class Search extends Workers {
                 this.bot.logger.debug(
                     isMobile,
                     'SEARCH-BING',
-                    `Submitted query to Bing | attempt=${i + 1}/${maxAttempts} | query="${query}"`
+                    `Submitted query to Bing | attempt=\( {i + 1}/ \){maxAttempts} | query="${query}"`
                 )
 
                 await this.bot.utils.wait(3000)
@@ -325,7 +325,7 @@ export class Search extends Workers {
 
                 if (this.bot.config.searchSettings.clickRandomResults) {
                     await this.bot.utils.wait(2000)
-                    await this.clickRandomResult(searchPage)
+                    await this.clickRandomResult(searchPage)  // ← Fixed method name
                 }
 
                 await this.bot.utils.wait(
@@ -340,7 +340,7 @@ export class Search extends Workers {
                 this.bot.logger.debug(
                     isMobile,
                     'SEARCH-BING',
-                    `Search counters after query | attempt=${i + 1}/${maxAttempts} | query="${query}"`
+                    `Search counters after query | attempt=\( {i + 1}/ \){maxAttempts} | query="${query}"`
                 )
 
                 return counters
@@ -349,7 +349,7 @@ export class Search extends Workers {
                     this.bot.logger.error(
                         isMobile,
                         'SEARCH-BING',
-                        `Failed after 5 retries | query="${query}" | message=${error instanceof Error ? error.message : String(error)}`
+                        `Failed after 5 retries | query="\( {query}" | message= \){error instanceof Error ? error.message : String(error)}`
                     )
                     break
                 }
@@ -357,13 +357,13 @@ export class Search extends Workers {
                 this.bot.logger.error(
                     isMobile,
                     'SEARCH-BING',
-                    `Search attempt failed | attempt=${i + 1}/${maxAttempts} | query="${query}" | message=${error instanceof Error ? error.message : String(error)}`
+                    `Search attempt failed | attempt=\( {i + 1}/ \){maxAttempts} | query="\( {query}" | message= \){error instanceof Error ? error.message : String(error)}`
                 )
 
                 this.bot.logger.warn(
                     isMobile,
                     'SEARCH-BING',
-                    `Retrying search | attempt=${i + 1}/${maxAttempts} | query="${query}"`
+                    `Retrying search | attempt=\( {i + 1}/ \){maxAttempts} | query="${query}"`
                 )
 
                 await this.bot.utils.wait(2000)
@@ -388,7 +388,7 @@ export class Search extends Workers {
             this.bot.logger.debug(
                 isMobile,
                 'SEARCH-RANDOM-SCROLL',
-                `Random scroll | viewportHeight=${viewportHeight} | totalHeight=${totalHeight} | scrollPos=${randomScrollPosition}`
+                `Random scroll | viewportHeight=\( {viewportHeight} | totalHeight= \){totalHeight} | scrollPos=${randomScrollPosition}`
             )
 
             await page.evaluate((scrollPos: number) => {
@@ -410,16 +410,16 @@ export class Search extends Workers {
     private async clickRandomResult(page: Page): Promise<void> {
         // Find result links
         const linkElements = await page.$$('#b_results .b_algo h2 a');
-    
+
         if (linkElements.length === 0) {
             this.bot.logger.debug(this.bot.isMobile, 'SEARCH-RANDOM-CLICK', 'No clickable result links found');
             return;
         }
-    
+
         // Pick one random link
         const randomIndex = Math.floor(Math.random() * linkElements.length);
         const selectedLink = linkElements[randomIndex];
-    
+
         let href: string | null = null;
         try {
             href = await selectedLink.getAttribute('href');
@@ -427,31 +427,31 @@ export class Search extends Workers {
             this.bot.logger.warn(this.bot.isMobile, 'SEARCH-RANDOM-CLICK', `Failed to get href: ${err}`);
             return;
         }
-    
+
         if (!href || !href.startsWith('http')) {
             this.bot.logger.debug(this.bot.isMobile, 'SEARCH-RANDOM-CLICK', 'Invalid or missing href');
             return;
         }
-    
+
         this.bot.logger.info(this.bot.isMobile, 'SEARCH-RANDOM-CLICK', `Visiting result: ${href}`);
-    
+
         try {
             // Navigate on the current page (no new tab)
             await page.goto(href, { waitUntil: 'domcontentloaded', timeout: 15000 });
-    
-            // Wait the configured time directly from config (no extra parsing)
+
+            // Wait the configured time directly from config
             const visitTime = this.bot.config.searchSettings.searchResultVisitTime || '30sec';
-            await this.bot.utils.wait(visitTime);  // ← Direct usage here
-    
+            await this.bot.utils.wait(visitTime);  // ← Direct usage (supports "30sec", "2min", etc.)
+
             // Go back to search results
             await page.goBack({ waitUntil: 'domcontentloaded', timeout: 10000 }).catch(async () => {
                 this.bot.logger.debug(this.bot.isMobile, 'SEARCH', 'goBack failed, reloading search page');
                 await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
             });
-    
+
             // Small random wait before next action
             await this.bot.utils.wait(1500 + Math.random() * 2000);
-    
+
             this.bot.logger.info(this.bot.isMobile, 'SEARCH-RANDOM-CLICK', 'Returned to search results');
         } catch (err) {
             this.bot.logger.warn(this.bot.isMobile, 'SEARCH-RANDOM-CLICK', `Click failed: ${err}`);
