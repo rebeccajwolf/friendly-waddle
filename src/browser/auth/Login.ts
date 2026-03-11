@@ -78,8 +78,8 @@ export class Login {
         try {
             this.bot.logger.info(this.bot.isMobile, 'LOGIN', 'Starting login process')
 
-            await page.goto('https://rewards.bing.com/createNewUser?idru=%2F', { waitUntil: 'domcontentloaded' }).catch(() => {})
-            await this.bot.utils.wait(7000)
+            await page.goto('https://www.bing.com/rewards/dashboard', { waitUntil: 'domcontentloaded' }).catch(() => {})
+            await this.bot.utils.wait(2000)
             await this.bot.browser.utils.reloadBadPage(page)
             await this.bot.browser.utils.disableFido(page)
 
@@ -162,6 +162,12 @@ export class Login {
         if (url.hostname === 'chromewebdata') {
             this.bot.logger.warn(this.bot.isMobile, 'DETECT-STATE', 'Detected chromewebdata error page')
             return 'CHROMEWEBDATA_ERROR'
+        }
+        
+        // NEW: Detect welcome page
+        if (url.hostname === 'rewards.bing.com' && url.pathname.includes('/welcome')) {
+            this.bot.logger.info(this.bot.isMobile, 'DETECT-STATE', 'Welcome page detected')
+            return 'WELCOME_PAGE'
         }
 
         const isLocked = await this.checkSelector(page, this.selectors.accountLocked)
@@ -281,6 +287,25 @@ export class Login {
         this.bot.logger.debug(this.bot.isMobile, 'HANDLE-STATE', `Processing state: ${state}`)
 
         switch (state) {
+            case 'WELCOME_PAGE': {
+                this.bot.logger.info(this.bot.isMobile, 'LOGIN', 'Welcome page detected - clicking "Start earning rewards"')
+
+                // Try XPath first (most reliable)
+                const startBtn = page.locator(this.selectors.startEarningButton)
+                const count = await startBtn.count()
+
+                if (count > 0) {
+                    await startBtn.first().click({ timeout: 5000 })
+                    this.bot.logger.info(this.bot.isMobile, 'LOGIN', 'Clicked start earning button via XPath')
+                } else {
+                    // Fallback to text
+                    await page.getByText('Start earning rewards', { exact: true }).click({ timeout: 5000 }).catch(() => {})
+                    this.bot.logger.info(this.bot.isMobile, 'LOGIN', 'Clicked start earning button via text')
+                }
+
+                await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {})
+                return true
+            }
             case 'ACCOUNT_LOCKED': {
                 const msg = 'This account has been locked! Remove from config and restart!'
                 this.bot.logger.error(this.bot.isMobile, 'LOGIN', msg)
