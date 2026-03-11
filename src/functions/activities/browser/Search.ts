@@ -325,7 +325,7 @@ export class Search extends Workers {
 
                 if (this.bot.config.searchSettings.clickRandomResults) {
                     await this.bot.utils.wait(2000)
-                    await this.clickRandomLink(searchPage, isMobile)
+                    await this.clickRandomResult(searchPage)
                 }
 
                 await this.bot.utils.wait(
@@ -403,55 +403,60 @@ export class Search extends Workers {
         }
     }
 
-    private async clickRandomResult(page: Page) {
-        // Find all potential result links
-        const links = await page.$$('#b_results .b_algo h2 a');
+    /**
+     * Visits a random search result using the SAME page (no new tab)
+     * to avoid creating many unique TCP destinations (HF abuse flag)
+     */
+    private async clickRandomResult(page: Page): Promise<void> {
+        // Find result links
+        const linkElements = await page.$$('#b_results .b_algo h2 a');
     
-        if (links.length === 0) {
-            this.bot.logger.debug(this.bot.isMobile, 'SEARCH', 'No clickable results found');
+        if (linkElements.length === 0) {
+            this.bot.logger.debug(this.bot.isMobile, 'SEARCH-RANDOM-CLICK', 'No clickable result links found');
             return;
         }
     
         // Pick one random link
-        const randomIndex = Math.floor(Math.random() * links.length);
-        const selectedLink = links[randomIndex];
+        const randomIndex = Math.floor(Math.random() * linkElements.length);
+        const selectedLink = linkElements[randomIndex];
     
-        let url: string;
+        let href: string | null = null;
         try {
-            url = await selectedLink.getAttribute('href') || '';
-            if (!url) return;
-        } catch {
+            href = await selectedLink.getAttribute('href');
+        } catch (err) {
+            this.bot.logger.warn(this.bot.isMobile, 'SEARCH-RANDOM-CLICK', `Failed to get href: ${err}`);
             return;
         }
     
-        this.bot.logger.info(this.bot.isMobile, 'SEARCH-RANDOM-CLICK', `Visiting result: ${url}`);
+        if (!href || !href.startsWith('http')) {
+            this.bot.logger.debug(this.bot.isMobile, 'SEARCH-RANDOM-CLICK', 'Invalid or missing href');
+            return;
+        }
+    
+        this.bot.logger.info(this.bot.isMobile, 'SEARCH-RANDOM-CLICK', `Visiting result: ${href}`);
     
         try {
-            // Navigate on the SAME page (no new tab)
-            await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+            // Navigate on the current page (no new tab)
+            await page.goto(href, { waitUntil: 'domcontentloaded', timeout: 15000 });
     
-            // Wait the configured time (simulates "reading")
-            const visitTimeMs = this.bot.utils.parseDurationToMs(
-                this.bot.config.searchSettings.searchResultVisitTime || '30sec'
-            );
-            await this.bot.utils.wait(visitTimeMs);
+            // Wait the configured time directly from config (no extra parsing)
+            const visitTime = this.bot.config.searchSettings.searchResultVisitTime || '30sec';
+            await this.bot.utils.wait(visitTime);  // ← Direct usage here
     
             // Go back to search results
-            await page.goBack({ waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => {
+            await page.goBack({ waitUntil: 'domcontentloaded', timeout: 10000 }).catch(async () => {
                 this.bot.logger.debug(this.bot.isMobile, 'SEARCH', 'goBack failed, reloading search page');
-                page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+                await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
             });
     
-            // Small safety wait
-            await this.bot.utils.wait(2000 + Math.random() * 2000);
+            // Small random wait before next action
+            await this.bot.utils.wait(1500 + Math.random() * 2000);
     
             this.bot.logger.info(this.bot.isMobile, 'SEARCH-RANDOM-CLICK', 'Returned to search results');
         } catch (err) {
             this.bot.logger.warn(this.bot.isMobile, 'SEARCH-RANDOM-CLICK', `Click failed: ${err}`);
-            // Fallback: reload search page if stuck
-            await page.goto('https://www.bing.com/search?q=' + encodeURIComponent(page.url().split('q=')[1] || ''), {
-                waitUntil: 'domcontentloaded'
-            }).catch(() => {});
+            // Fallback: reload current search page if stuck
+            await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
         }
     }
 }
