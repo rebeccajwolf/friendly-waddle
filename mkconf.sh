@@ -30,7 +30,7 @@ cat > /home/user/app/dist/config.json <<EOF
         "scrollRandomResults": true,
         "clickRandomResults": true,
         "parallelSearching": true,
-        "queryEngines": ["google", "wikipedia", "reddit", "local"],
+        "queryEngines": ["google", "local"],
         "searchResultVisitTime": "30sec",
         "searchDelay": {
             "min": "17min",
