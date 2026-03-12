@@ -25,7 +25,6 @@ fi
 echo "📋 Current DNS configuration:"
 cat /etc/resolv.conf 2>/dev/null || echo "   (cannot read resolv.conf)"
 
-
 echo "🔄 Checking for prod..."
 dig +short prod.rewardsplatform.microsoft.com
 echo "🔄 Checking for rewards..."
@@ -50,10 +49,15 @@ echo "✅ UV_THREADPOOL_SIZE: $UV_THREADPOOL_SIZE"
 
 cd /home/user/app
 
-# Start services
 echo "========================================="
 echo "🚀 Starting services..."
 echo "========================================="
+
+# Install yacron if not already present
+if ! command -v yacron >/dev/null 2>&1; then
+    echo "📦 Installing yacron..."
+    pip install --no-cache-dir yacron
+fi
 
 # Start keep_alive in background
 nohup gunicorn keep_alive:app --bind 0.0.0.0:7860 &
@@ -64,18 +68,26 @@ echo "✅ keep_alive started with PID: $KEEP_ALIVE_PID"
 echo "📝 Running mkconf.sh..."
 bash mkconf.sh
 
-# Run daily tasks if enabled
+# Run initial daily tasks if enabled
 if [ "$RUN_ON_START" = "true" ]; then
-    echo "📅 Running daily tasks..."
+    echo "📅 Running initial daily tasks..."
     bash src/run_daily.sh
+else
+    echo "⏭️ Skipping initial daily tasks (RUN_ON_START is not true)"
 fi
 
+# Verify job.yaml exists before starting yacron
+if [ ! -f "job.yaml" ]; then
+    echo "❌ ERROR: job.yaml not found in current directory!"
+    ls -la
+    exit 1
+fi
+
+echo "✅ Found job.yaml – starting yacron scheduler"
+
+# Start yacron in foreground (keeps container alive)
 echo "========================================="
-echo "✅ All services started"
+echo "🚀 Starting yacron scheduler..."
 echo "========================================="
 
-# Wait for any process to exit
-wait -n
-
-# Exit with the status of the first process that exits
-exit $?
+exec yacron --config job.yaml
