@@ -36,6 +36,10 @@ echo "🔄 Checking for bing..."
 dig +short www.bing.com
 echo "🔄 Checking for discord..."
 dig +short discord.com
+echo "🔄 Checking for bingapis..."
+dig +short www.bingapis.com
+echo "🔄 Checking for api bing..."
+dig +short api.bing.com
 
 # Set Node.js options
 export NODE_OPTIONS="--require ./dist/net-patch.js --dns-result-order=ipv4first"

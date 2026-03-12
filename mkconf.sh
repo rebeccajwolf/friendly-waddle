@@ -28,7 +28,7 @@ cat > /home/user/app/dist/config.json <<EOF
     "globalTimeout": "600sec",
     "searchSettings": {
         "scrollRandomResults": true,
-        "clickRandomResults": true,
+        "clickRandomResults": false,
         "parallelSearching": true,
         "queryEngines": ["google", "local"],
         "searchResultVisitTime": "30sec",
