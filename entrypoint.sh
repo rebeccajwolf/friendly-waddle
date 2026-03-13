@@ -49,49 +49,7 @@ echo "✅ UV_THREADPOOL_SIZE: $UV_THREADPOOL_SIZE"
 
 cd /home/user/app
 
-echo "========================================="
-echo "🚀 Starting services..."
-echo "========================================="
-
-# Install yacron if not already present
-if ! command -v yacron >/dev/null 2>&1; then
-    echo "📦 Installing yacron..."
-    pip install --no-cache-dir yacron
-fi
-
-# Start keep_alive in background
-nohup gunicorn keep_alive:app --bind 0.0.0.0:7860 &
-KEEP_ALIVE_PID=$!
-echo "✅ keep_alive started with PID: $KEEP_ALIVE_PID"
-
-# Start yacron in background right away (so scheduler is active immediately)
-if [ -f "job.yaml" ]; then
-    echo "✅ Found job.yaml – starting yacron in background"
-    nohup yacron --config job.yaml > yacron.log 2>&1 &
-    YACRON_PID=$!
-    echo "   yacron started with PID: $YACRON_PID"
-    echo "   Logs redirected to yacron.log"
-else
-    echo "⚠️ WARNING: job.yaml not found — yacron will NOT start"
-    ls -la
-fi
-
-# Run mkconf.sh
-echo "📝 Running mkconf.sh..."
-bash mkconf.sh
-
-# Run initial daily tasks if enabled (this blocks until finished)
-if [ "$RUN_ON_START" = "true" ]; then
-    echo "📅 Running initial daily tasks..."
-    bash src/run_daily.sh
-else
-    echo "⏭️ Skipping initial daily tasks (RUN_ON_START is not true)"
-fi
-
-echo "========================================="
-echo "✅ All startup tasks completed"
-echo "========================================="
-
-# If something exits, show status and exit
-echo "One of the background processes exited."
-ps aux | grep -E 'gunicorn|yacron|python|node'
+sh -c "nohup gunicorn keep_alive:app --bind 0.0.0.0:7860 & \
+    bash mkconf.sh && \
+    if [ \"$RUN_ON_START\" = \"true\" ]; then bash src/run_daily.sh fi & \
+    yacron -c job.yaml"
