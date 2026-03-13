@@ -90,6 +90,11 @@ export default class BrowserFunc {
     
             const response = await this.browserHTTP.get<any>(url, headers);
             
+            // NEW: Check for Microsoft Rewards suspension code (code: 9)
+            if (response.data && typeof response.data === 'object' && response.data.code === 9) {
+                throw new Error("@everyone Account Suspended!");
+            }
+            
             if (response.data && typeof response.data === 'object') {
                 if (response.data.dashboard) {
                     this.bot.logger.debug(this.bot.isMobile, 'BROWSER-FUNC', 'Dashboard data fetched successfully via browser');
