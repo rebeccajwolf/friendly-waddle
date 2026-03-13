@@ -95,4 +95,3 @@ echo "========================================="
 # If something exits, show status and exit
 echo "One of the background processes exited."
 ps aux | grep -E 'gunicorn|yacron|python|node'
-exit 0
