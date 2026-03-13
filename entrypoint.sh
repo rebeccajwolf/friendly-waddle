@@ -92,11 +92,6 @@ echo "========================================="
 echo "✅ All startup tasks completed"
 echo "========================================="
 
-# Keep container alive by waiting on background processes
-# (yacron + gunicorn should keep it running; this is just safety)
-echo "⏳ Waiting for background processes (yacron / gunicorn)..."
-wait -n
-
 # If something exits, show status and exit
 echo "One of the background processes exited."
 ps aux | grep -E 'gunicorn|yacron|python|node'
