@@ -64,11 +64,23 @@ nohup gunicorn keep_alive:app --bind 0.0.0.0:7860 &
 KEEP_ALIVE_PID=$!
 echo "✅ keep_alive started with PID: $KEEP_ALIVE_PID"
 
+# Start yacron in background right away (so scheduler is active immediately)
+if [ -f "job.yaml" ]; then
+    echo "✅ Found job.yaml – starting yacron in background"
+    nohup yacron --config job.yaml > yacron.log 2>&1 &
+    YACRON_PID=$!
+    echo "   yacron started with PID: $YACRON_PID"
+    echo "   Logs redirected to yacron.log"
+else
+    echo "⚠️ WARNING: job.yaml not found — yacron will NOT start"
+    ls -la
+fi
+
 # Run mkconf.sh
 echo "📝 Running mkconf.sh..."
 bash mkconf.sh
 
-# Run initial daily tasks if enabled
+# Run initial daily tasks if enabled (this blocks until finished)
 if [ "$RUN_ON_START" = "true" ]; then
     echo "📅 Running initial daily tasks..."
     bash src/run_daily.sh
@@ -76,18 +88,16 @@ else
     echo "⏭️ Skipping initial daily tasks (RUN_ON_START is not true)"
 fi
 
-# Verify job.yaml exists before starting yacron
-if [ ! -f "job.yaml" ]; then
-    echo "❌ ERROR: job.yaml not found in current directory!"
-    ls -la
-    exit 1
-fi
-
-echo "✅ Found job.yaml – starting yacron scheduler"
-
-# Start yacron in foreground (keeps container alive)
 echo "========================================="
-echo "🚀 Starting yacron scheduler..."
+echo "✅ All startup tasks completed"
 echo "========================================="
 
-exec yacron --config job.yaml
+# Keep container alive by waiting on background processes
+# (yacron + gunicorn should keep it running; this is just safety)
+echo "⏳ Waiting for background processes (yacron / gunicorn)..."
+wait -n
+
+# If something exits, show status and exit
+echo "One of the background processes exited."
+ps aux | grep -E 'gunicorn|yacron|python|node'
+exit 0
