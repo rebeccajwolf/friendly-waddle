@@ -30,7 +30,6 @@ type LoginState =
     | 'OTP_CODE_ENTRY'
     | 'UNKNOWN'
     | 'CHROMEWEBDATA_ERROR'
-    | 'WELCOME_PAGE'
 
 export class Login {
     emailLogin: EmailLogin
@@ -64,9 +63,7 @@ export class Login {
         bingProfile: '#id_n',
         requestToken: 'input[name="__RequestVerificationToken"]',
         requestTokenMeta: 'meta[name="__RequestVerificationToken"]',
-        otpInput: 'div[data-testid="codeEntry"]',
-        startEarningButton: '//*[@id="start-earning-rewards-link"]',   // NEW
-        welcomePageIndicator: 'text=Start earning rewards'             // NEW fallback
+        otpInput: 'div[data-testid="codeEntry"]'
     } as const
 
     constructor(private bot: MicrosoftRewardsBot) {
@@ -81,7 +78,11 @@ export class Login {
         try {
             this.bot.logger.info(this.bot.isMobile, 'LOGIN', 'Starting login process')
 
-            await page.goto('https://www.bing.com/rewards/dashboard', { waitUntil: 'domcontentloaded' }).catch(() => {})
+            await page
+                .goto('https://rewards.bing.com/createuser?idru=%2F&userScenarioId=anonsignin', {
+                    waitUntil: 'domcontentloaded'
+                })
+                .catch(() => {})
             await this.bot.utils.wait(2000)
             await this.bot.browser.utils.reloadBadPage(page)
             await this.bot.browser.utils.disableFido(page)
@@ -165,12 +166,6 @@ export class Login {
         if (url.hostname === 'chromewebdata') {
             this.bot.logger.warn(this.bot.isMobile, 'DETECT-STATE', 'Detected chromewebdata error page')
             return 'CHROMEWEBDATA_ERROR'
-        }
-        
-        // NEW: Detect welcome page
-        if (url.hostname === 'rewards.bing.com' && url.pathname.includes('/welcome')) {
-            this.bot.logger.info(this.bot.isMobile, 'DETECT-STATE', 'Welcome page detected')
-            return 'WELCOME_PAGE'
         }
 
         const isLocked = await this.checkSelector(page, this.selectors.accountLocked)
@@ -265,8 +260,7 @@ export class Login {
             'GET_A_CODE',
             'GET_A_CODE_2',
             'LOGIN_PASSWORDLESS',
-            '2FA_TOTP',
-            'WELCOME_PAGE'
+            '2FA_TOTP'
         ]
 
         for (const priority of priorities) {
@@ -291,25 +285,6 @@ export class Login {
         this.bot.logger.debug(this.bot.isMobile, 'HANDLE-STATE', `Processing state: ${state}`)
 
         switch (state) {
-            case 'WELCOME_PAGE': {
-                this.bot.logger.info(this.bot.isMobile, 'LOGIN', 'Welcome page detected - clicking "Start earning rewards"')
-
-                // Try XPath first (most reliable)
-                const startBtn = page.locator(this.selectors.startEarningButton)
-                const count = await startBtn.count()
-
-                if (count > 0) {
-                    await startBtn.first().click({ timeout: 5000 })
-                    this.bot.logger.info(this.bot.isMobile, 'LOGIN', 'Clicked start earning button via XPath')
-                } else {
-                    // Fallback to text
-                    await page.getByText('Start earning rewards', { exact: true }).click({ timeout: 5000 }).catch(() => {})
-                    this.bot.logger.info(this.bot.isMobile, 'LOGIN', 'Clicked start earning button via text')
-                }
-
-                await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {})
-                return true
-            }
             case 'ACCOUNT_LOCKED': {
                 const msg = 'This account has been locked! Remove from config and restart!'
                 this.bot.logger.error(this.bot.isMobile, 'LOGIN', msg)
@@ -689,6 +664,25 @@ export class Login {
 
                     const html = await page.content()
                     const $ = await this.bot.browser.utils.loadInCheerio(html)
+
+                    // Check which version of the dashboard is being used, disable requestToken req on new dash
+                    const isModernDashboard = $('section#dailyset').length > 0 // Only on new UI and on dashboard/overview page
+
+                    if (isModernDashboard) {
+                        this.bot.rewardsVersion = 'modern'
+
+                        this.bot.logger.warn(
+                            this.bot.isMobile,
+                            'GET-REWARD-SESSION',
+                            'Modern Rewards dashboard detected. This script version may not fully support it.'
+                        )
+
+                        this.bot.logger.warn(
+                            this.bot.isMobile,
+                            'GET-REWARD-SESSION',
+                            'RequestToken disabled for this session (expected behavior).'
+                        )
+                    }
 
                     const token =
                         $(this.selectors.requestToken).attr('value') ??

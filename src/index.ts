@@ -82,6 +82,8 @@ export class MicrosoftRewardsBot {
     public mainDesktopPage!: Page
 
     public userData: UserData
+    
+    public rewardsVersion: 'legacy' | 'modern' = 'legacy'
 
     public accessToken = ''
     public requestToken = ''
