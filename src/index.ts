@@ -209,7 +209,7 @@ export class MicrosoftRewardsBot {
                     const level = log.level
                     if (webhook.discord?.enabled && webhook.discord.url) {
                         const { url: modifiedUrl, originalHostname } = this.replaceDiscordUrlHostname(webhook.discord.url)
-                        sendDiscord(modifiedUrl, content, level, originalHostname, this)  // Pass 'this' as bot
+                        sendDiscord(modifiedUrl, content, level, originalHostname)  // Pass 'this' as bot
                     }
                     if (webhook.ntfy?.enabled && webhook.ntfy.url) {
                         sendNtfy(webhook.ntfy, content, level)
