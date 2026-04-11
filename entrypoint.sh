@@ -41,11 +41,11 @@ echo "🔄 Checking for api bing..."
 dig +short api.bing.com
 
 # Set Node.js options
-export NODE_OPTIONS="--require ./dist/net-patch.js --dns-result-order=ipv4first"
-export UV_THREADPOOL_SIZE=4
+# export NODE_OPTIONS="--require ./dist/net-patch.js --dns-result-order=ipv4first"
+# export UV_THREADPOOL_SIZE=4
 
-echo "✅ NODE_OPTIONS: $NODE_OPTIONS"
-echo "✅ UV_THREADPOOL_SIZE: $UV_THREADPOOL_SIZE"
+# echo "✅ NODE_OPTIONS: $NODE_OPTIONS"
+# echo "✅ UV_THREADPOOL_SIZE: $UV_THREADPOOL_SIZE"
 
 cd /home/user/app
 
