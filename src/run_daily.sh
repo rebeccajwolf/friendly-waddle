@@ -77,8 +77,8 @@ til(){
 echo "Sleeping for $SLEEP_MINUTES minutes ($SLEEPTIME seconds)..."
 
 # Sleep for the calculated time
-# sleep $SLEEPTIME
-# til $(date -d "$SLEEP_MINUTES minutes" +%H:%M)
+sleep $SLEEPTIME
+til $(date -d "$SLEEP_MINUTES minutes" +%H:%M)
 # Log the start of the script
 echo "Starting script..."
 
