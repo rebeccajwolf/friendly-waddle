@@ -101,9 +101,10 @@ fi
 # Restore node_modules if it was backed up and not restored
 [ -d "$BACKUP_DIR/node_modules" ] && [ ! -d "/home/user/app/node_modules" ] && mv "$BACKUP_DIR/node_modules" /home/user/app/
 
+
+exec "npm run pre-build && npm run build"
+
 sh -c "nohup gunicorn keep_alive:app --bind 0.0.0.0:7860 & \
     bash mkconf.sh && \
-    npm run pre-build && \
-    npm run build && \
     if [ \"$RUN_ON_START\" = \"true\" ]; then bash src/run_daily.sh; fi & \
     yacron -c /home/user/app/job.yaml"
