@@ -101,10 +101,6 @@ fi
 # Restore node_modules if it was backed up and not restored
 [ -d "$BACKUP_DIR/node_modules" ] && [ ! -d "/home/user/app/node_modules" ] && mv "$BACKUP_DIR/node_modules" /home/user/app/
 
-
-echo "Installing browser dependencies..."
-npx patchright install --with-deps --only-shell chromium
-
 echo "Running pre-build..."
 npm run pre-build
 
