@@ -102,7 +102,14 @@ fi
 [ -d "$BACKUP_DIR/node_modules" ] && [ ! -d "/home/user/app/node_modules" ] && mv "$BACKUP_DIR/node_modules" /home/user/app/
 
 
-exec "npx patchright install --with-deps --only-shell chromium && npm run pre-build && npm run build"
+echo "Installing browser dependencies..."
+npx patchright install --with-deps --only-shell chromium
+
+echo "Running pre-build..."
+npm run pre-build
+
+echo "Running build..."
+npm run build
 
 sh -c "nohup gunicorn keep_alive:app --bind 0.0.0.0:7860 & \
     bash mkconf.sh && \
