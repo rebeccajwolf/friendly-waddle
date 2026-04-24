@@ -103,9 +103,6 @@ fi
 
 gunicorn keep_alive:app --bind 0.0.0.0:7860 &
 
-echo "Running pre-build..."
-npm run pre-build
-
 echo "Running build..."
 npm run build
 
