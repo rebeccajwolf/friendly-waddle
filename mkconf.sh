@@ -29,7 +29,7 @@ cat > /home/user/app/dist/config.json <<EOF
     "searchSettings": {
         "scrollRandomResults": true,
         "clickRandomResults": false,
-        "parallelSearching": true,
+        "parallelSearching": false,
         "queryEngines": ["google", "local"],
         "searchResultVisitTime": "30sec",
         "searchDelay": {
