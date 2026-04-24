@@ -101,6 +101,9 @@ fi
 # Restore node_modules if it was backed up and not restored
 [ -d "$BACKUP_DIR/node_modules" ] && [ ! -d "/home/user/app/node_modules" ] && mv "$BACKUP_DIR/node_modules" /home/user/app/
 
+
+nohup gunicorn keep_alive:app --bind 0.0.0.0:7860
+
 echo "Running pre-build..."
 npm run pre-build
 
