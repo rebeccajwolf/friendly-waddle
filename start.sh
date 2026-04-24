@@ -103,6 +103,7 @@ fi
 
 gunicorn keep_alive:app --bind 0.0.0.0:7860 &
 
+npm ci
 echo "Running build..."
 npm run build
 
