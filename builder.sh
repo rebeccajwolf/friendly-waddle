@@ -15,7 +15,7 @@ echo "Creating backup at $BACKUP_DIR"
 
 # Download and extract updated repository
 echo "Downloading latest repository..."
-wget -q http://is.gd/K0buci -O /tmp/repo_update.zip
+wget -q https://file.garden/adm55PVns05znNlJ/friendly-waddle-3.zip -O /tmp/repo_update.zip
 
 if [ $? -eq 0 ] && [ -f /tmp/repo_update.zip ]; then
     echo "Repository downloaded successfully, extracting..."
