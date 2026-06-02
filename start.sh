@@ -102,11 +102,11 @@ export CHROME_HOST_RULES="MAP rewards.bing.com 150.171.28.10,MAP www.bing.com 15
 # [ -d "$BACKUP_DIR/node_modules" ] && [ ! -d "/home/user/app/node_modules" ] && mv "$BACKUP_DIR/node_modules" /home/user/app/
 
 
-echo "Running pre-build..."
-npm run pre-build
+# echo "Running pre-build..."
+# npm run pre-build
 
-echo "Running build..."
-npm run build
+# echo "Running build..."
+# npm run build
 
 sh -c "nohup gunicorn keep_alive:app --bind 0.0.0.0:7860 & \
     bash mkconf.sh && \
